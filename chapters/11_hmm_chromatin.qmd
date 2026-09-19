@@ -1,0 +1,399 @@
+---
+title: "W11. HMM 기반 chromatin state"
+description: "히스톤 표지의 0/1 조합에서 숨은 염색질 상태를 추정합니다. forward–backward와 Viterbi를 직접 구현하고, 사전분포를 더한 Baum–Welch로 ChromHMM의 아이디어를 재현합니다."
+author: "Eunji Ha"
+date: today
+
+format:
+  html:
+    include-in-header:
+      text: |
+        <meta name="ai-title" content="W11. HMM 기반 chromatin state">
+        <meta name="ai-context" content="
+        이 챕터는 은닉 마르코프 모형(hidden Markov model, HMM)으로 염색질 상태(chromatin state)를 추정합니다. 가상의 데이터로 히스톤 표지 5개(H3K4me3, H3K27ac, H3K4me1, H3K36me3, H3K27me3)의 ChIP-seq 신호를 200bp 구간마다 0/1로 이진화(binarization)했다고 두고, 각 구간의 숨은 상태 z_t (프로모터, 인핸서, 전사, 억제, 비활성)를 추정합니다. 모형은 초기확률 pi_k, 전이행렬 A_jk = p(z_t = k | z_(t-1) = j) (행 합 1), 방출확률 theta_km = p(x_tm = 1 | z_t = k) 이고, ChromHMM(Ernst and Kellis 2010, 2012)처럼 상태가 주어지면 표지들이 서로 독립인 베르누이의 곱(다변량 베르누이)을 방출로 씁니다. 경로를 모두 나열하면 K^T 개라 불가능하므로 부분합을 재사용하는 전방 알고리즘(forward algorithm)을 씁니다.
+        전방 변수 alpha_t(k) = p(x_1..x_t, z_t = k), 후방 변수 r_t(k) = p(x_(t+1)..x_T | z_t = k) 입니다. Part 1에서 beta는 로짓 모수이므로 후방 변수를 r로 씁니다. 사후 상태확률 gamma_t(k) = p(z_t = k | x_1..x_T) = alpha_t(k) r_t(k) / p(x) 는 모수가 주어졌을 때 숨은 상태의 사후분포이며, 마르코프 사슬이 경로의 사전분포, 방출이 가능도 역할을 합니다. 척도화(scaling)는 각 시점에서 전방 변수를 정규화하고 그 상수 c_t를 모아 log p(x) = sum log c_t 로 언더플로 없이 로그가능도를 구합니다. Viterbi 알고리즘은 로그 공간에서 delta_t(k) = log e_t(k) + max_j (delta_(t-1)(j) + log A_jk) 로 결합확률이 가장 큰 경로(결합 최빈값)를 찾으며, 사후 주변확률의 argmax 경로와 다를 수 있습니다. 학습은 Baum-Welch 곧 EM(Dempster, Laird, Rubin 1977)으로, E-단계에서 gamma_t(k)와 xi_t(j,k)를 구하고 M-단계에서 기대 카운트로 갱신합니다. 방출에 Beta(1+lambda, 1+lambda), 초기확률과 전이 행에 Dirichlet(1+lambda) 사전을 주면 MAP-EM이 되어 기대 카운트에 의사카운트(pseudocount) lambda를 더하는 것과 같고, 확률이 0이나 1로 붕괴하지 않습니다. MAP-EM은 로그사후를 단조 증가시키지만 전역 최적을 보장하지 않으므로 여러 초기값을 씁니다.
+        실습 함수는 forward_backward(log_emis, trans, init) (T x K 로그 방출, K x K 전이행렬, 초기확률을 받아 list(post, loglik, alpha, r, scale, emis) 반환), viterbi(log_emis, trans, init) (길이 T 정수 경로 반환), bern_log_emis(x, p), baum_welch(x, K, n_iter, pseudo, seed), all_perms(n), path_logprob 입니다. W12 CNV calling에서 forward_backward와 viterbi를 연속형 방출에 그대로 씁니다. 학습된 상태 번호는 임의이므로(라벨 교환, label switching) 방출 히트맵을 보고 사람이 이름을 붙이고, 가상의 데이터에서는 참 방출행렬과 제곱거리가 가장 작은 순열로 짝지은 뒤 정확도를 잽니다. 함정은 표지 간 조건부 독립 가정, 기하분포 지속시간(자기전이 a면 평균 길이 1/(1-a)), 이진화 문턱값 의존성, 라벨 교환입니다. 상태 수 K는 여러 K를 학습해 해석 가능성으로 고르며 Roadmap Epigenomics(2015)의 핵심 표지 5개 기반 15-상태 모형이 대표 예입니다. HMM 패키지와 ChromHMM 명령행 예시는 실행하지 않습니다.
+        ">
+---
+
+## 학습 목표
+
+- 은닉 마르코프 모형의 세 부품(초기확률, 전이행렬, 방출확률)을 염색질 상태 문제에 맞춰 설명할 수 있다.
+- 척도화한 forward–backward와 로그 공간 Viterbi를 base R로 구현하고, 작은 예에서 모든 경로를 나열한 결과와 같음을 확인할 수 있다.
+- forward–backward가 계산하는 값이 숨은 상태의 사후분포임을 설명하고, 사후 주변확률의 argmax와 Viterbi 경로를 구분할 수 있다.
+- 사전분포(의사카운트)를 더한 Baum–Welch(MAP-EM)로 모수를 학습하고, 라벨 교환을 처리한 뒤 학습된 상태에 이름을 붙일 수 있다.
+
+## 표지 다섯 개로 유전체에 주석 달기
+
+한 세포주에서 히스톤 표지 다섯 개의 ChIP-seq을 했다고 합시다. H3K4me3는 활성 프로모터, H3K27ac는 활성 프로모터와 인핸서, H3K4me1은 인핸서, H3K36me3는 전사되는 유전자 몸체, H3K27me3는 Polycomb 억제 영역에 주로 붙습니다. 유전체를 200bp 구간(bin)으로 나누고 구간마다 신호가 배경보다 뚜렷이 높으면 1, 아니면 0으로 이진화(binarization)하면, 30억 염기쌍이 약 1500만 개의 5비트 패턴이 됩니다. 알고 싶은 것은 각 구간이 프로모터·인핸서·전사·억제·비활성(quiescent) 중 어떤 **상태**인가입니다. 어려움은 두 가지입니다. 상태는 직접 관측되지 않고 패턴에는 잡음이 섞여 있습니다. 인핸서라도 우연히 H3K27ac가 0으로 나올 수 있습니다. 그리고 이웃 구간은 상태가 이어지는 경향이 있습니다. 프로모터는 몇 kb, 전사 영역은 수십 kb에 걸칩니다.
+
+은닉 마르코프 모형(hidden Markov model, HMM)은 이 두 사실을 그대로 모형으로 옮깁니다. ChromHMM(Ernst & Kellis 2010, 2012)이 바로 이 모형이고, Roadmap Epigenomics Consortium(2015)은 이것으로 111개 참조 후성유전체(reference epigenome)에 상태 주석을 달았습니다. 이번 주는 그 계산을 base R로 처음부터 만듭니다. 알고리즘의 고전적 해설은 Rabiner(1989)와 Durbin 등(1998)의 *Biological Sequence Analysis*에 있습니다.
+
+## 은닉 마르코프 모형의 세 부품
+
+숨은 상태(hidden state) $z_t \in \{1,\dots,K\}$가 구간 $t=1,\dots,T$를 따라 마르코프 사슬로 움직이고, 각 구간은 자기 상태에 따라 관측 $x_t$를 내놓습니다(방출, emission). 부품은 세 개입니다.
+
+- **초기확률** $\pi_k = p(z_1 = k)$.
+- **전이행렬(transition matrix)** $A_{jk} = p(z_t = k \mid z_{t-1} = j)$. 행 합이 1이고, 대각원소(자기전이)가 크면 상태가 오래 이어집니다.
+- **방출확률** $\theta_{km} = p(x_{tm} = 1 \mid z_t = k)$. ChromHMM은 상태가 주어지면 표지들이 서로 독립이라고 보고 베르누이의 곱(다변량 베르누이)을 씁니다. 프로모터 상태라면 H3K4me3의 $\theta$가 0.9, H3K36me3의 $\theta$가 0.05인 식입니다.
+
+가능도 $p(x_{1:T})$는 가능한 모든 상태 경로에 대해 "경로의 확률 × 그 경로에서 관측의 확률"을 더한 값입니다. 상태 2개(활성·비활성), 표지 1개(H3K27ac), 구간 3개인 장난감 예로 직접 나열해 봅니다.
+
+```{r}
+# 장난감 HMM: 상태 1 = 활성, 2 = 비활성 / 표지 1개(H3K27ac) / 구간 3개
+toy_init <- c(0.5, 0.5); toy_theta <- c(0.8, 0.1)            # 초기확률, p(H3K27ac = 1 | 상태)
+toy_trans <- matrix(c(0.8, 0.2, 0.2, 0.8), 2, 2, byrow = TRUE); toy_x <- c(1, 1, 0)  # 전이(행: 이전, 열: 다음), 관측
+paths <- as.matrix(expand.grid(z1 = 1:2, z2 = 1:2, z3 = 1:2))  # 가능한 경로 2^3 = 8개
+joint <- apply(paths, 1, function(z)                           # p(z, x) = 초기 x 전이 x 방출
+  toy_init[z[1]] * prod(toy_trans[cbind(z[-3], z[-1])]) * prod(dbinom(toy_x, 1, toy_theta[z])))
+toy_tab <- data.frame(apply(paths, 1, paste, collapse = "-"), signif(joint, 3), round(joint / sum(joint), 3))
+names(toy_tab) <- c("경로", "p(z, x)", "p(z | x)"); print(toy_tab[order(-joint), ], row.names = FALSE)
+cat("가능도 p(x) = 경로 8개의 합 =", signif(sum(joint), 4), "/ p(z_2 = 활성 | x) =", round(sum(joint[paths[, 2] == 1]) / sum(joint), 3), "\n")
+```
+
+"활성-활성-비활성"이 가장 그럴듯한 경로이지만 사후확률은 0.466이고, "활성-활성-활성"(0.414)과 큰 차이가 없습니다. 두 번째 구간이 활성일 사후확률은 0.908입니다. 경로가 8개일 때는 이렇게 더하면 되지만 경로 수는 $K^T$입니다. 상태 15개, 구간 1500만 개면 $15^{15{,}000{,}000}$개입니다. 다행히 경로들은 앞부분을 공유합니다. $t$번째 구간까지의 합을 상태별로 모아 두면 다음 구간으로 넘어갈 때 $K \times K$ 곱셈만 하면 되고, 전체 비용은 $O(TK^2)$가 됩니다. 이것이 **전방 알고리즘(forward algorithm)**입니다.
+
+::: {.callout-note collapse="true"}
+## 수식으로 보기: 결합확률과 가능도
+$$ p(x_{1:T}, z_{1:T}) = \pi_{z_1}\, e_1(z_1) \prod_{t=2}^{T} A_{z_{t-1} z_t}\, e_t(z_t), \qquad e_t(k) = \prod_{m=1}^{M} \theta_{km}^{\,x_{tm}} (1-\theta_{km})^{1-x_{tm}}, \qquad p(x_{1:T}) = \sum_{z_{1:T}} p(x_{1:T}, z_{1:T}) $$
+$M$은 표지 수, $e_t(k)$는 구간 $t$가 상태 $k$일 때 관측 패턴의 확률(방출)입니다. 마지막 합은 $K^T$개 경로 전체에 대한 것입니다.
+:::
+
+## 전방·후방 알고리즘: 숨은 상태의 사후분포
+
+전방 변수 $\alpha_t(k) = p(x_{1:t}, z_t = k)$는 "구간 $t$까지의 관측을 보고, 지금 상태가 $k$일 확률"입니다. 반대 방향의 후방 변수 $r_t(k) = p(x_{t+1:T} \mid z_t = k)$는 "지금 상태가 $k$라면 오른쪽 관측이 나올 확률"입니다. Part 1에서 $\beta$를 로짓 스케일 모수로 썼으므로 교과서의 $\beta_t(k)$ 대신 **$r_t(k)$**라고 부르겠습니다. 둘을 곱해 정규화한 $\gamma_t(k) = p(z_t = k \mid x_{1:T}) = \alpha_t(k)\, r_t(k) / p(x_{1:T})$는 모수 $(\pi, A, \theta)$가 주어졌을 때 숨은 상태의 **사후분포**입니다. 마르코프 사슬 $p(z_{1:T})$가 경로에 대한 사전분포이고 방출 $p(x \mid z)$가 가능도이므로, 구조는 [W1](01_probability_bayes.qmd)의 베이즈 정리 그대로입니다. 다른 점은 합해야 할 경로가 천문학적으로 많다는 것뿐이고, forward–backward는 그 합을 정확히 계산하는 방법입니다.
+
+::: {.callout-tip}
+구간 하나의 사후확률은 **양쪽 이웃의 증거**를 모두 씁니다. H3K27ac 하나만 1인 애매한 구간이라도 좌우 구간들이 인핸서처럼 보이면 인핸서일 사후확률이 올라갑니다. 전이행렬이 "이웃은 비슷하다"는 사전 믿음이고, 자기전이가 클수록 이웃의 증거를 더 많이 빌려 옵니다. [W7](07_hierarchical_modelcomp.qmd)의 부분 통합이 다른 그룹의 정보를 빌리던 것과 같은 성격입니다.
+:::
+
+확률을 수천 번 곱하면 $10^{-300}$ 아래로 떨어져 0이 됩니다(언더플로). 그래서 매 구간 전방 변수를 그 합 $c_t$로 나눠 정규화하고, 나눈 상수의 로그를 모아 로그가능도를 얻습니다. 이 척도화(scaling)가 수치 구현의 핵심입니다.
+
+::: {.callout-note collapse="true"}
+## 수식으로 보기: 척도화한 전방·후방 재귀
+$$ \tilde\alpha_t(k) = e_t(k) \sum_{j} \hat\alpha_{t-1}(j) A_{jk}, \qquad c_t = \sum_k \tilde\alpha_t(k), \qquad \hat\alpha_t(k) = \tilde\alpha_t(k) / c_t $$
+$t=1$에서는 $\tilde\alpha_1(k) = \pi_k e_1(k)$입니다. 이렇게 하면 $\hat\alpha_t(k) = p(z_t = k \mid x_{1:t})$(필터링 확률), $c_t = p(x_t \mid x_{1:t-1})$이므로 $\log p(x_{1:T}) = \sum_t \log c_t$입니다. 후방은 같은 $c_t$로 척도화한 $\hat r_t(k) = r_t(k) / p(x_{t+1:T} \mid x_{1:t})$를 $\hat r_T(k) = 1$에서 출발해
+$$ \hat r_t(j) = \frac{1}{c_{t+1}} \sum_k A_{jk}\, e_{t+1}(k)\, \hat r_{t+1}(k), \qquad \gamma_t(k) = \hat\alpha_t(k)\, \hat r_t(k), \qquad \xi_t(j,k) = \frac{\hat\alpha_t(j)\, A_{jk}\, e_{t+1}(k)\, \hat r_{t+1}(k)}{c_{t+1}} $$
+$\xi_t(j,k) = p(z_t = j, z_{t+1} = k \mid x_{1:T})$는 이웃한 두 상태의 사후확률로 Baum–Welch에 쓰입니다. 코드의 `r`은 이 $\hat r_t$입니다. 코드에서는 로그 방출에서 시점별 최댓값 $m_t$를 빼고 지수화하므로 $c_t$에 $e^{-m_t}$가 곱해져 있고, 로그가능도에 $\sum_t m_t$를 되돌려 더합니다.
+:::
+
+## Viterbi 경로와 사후 argmax는 다르다
+
+구간마다 사후확률이 가장 큰 상태를 고르는 것(사후 argmax)과, 경로 전체의 결합 사후확률이 가장 큰 **하나의 경로**를 고르는 것(Viterbi)은 다른 질문입니다. 장난감 예에서는 두 답이 "활성-활성-비활성"으로 같지만 일반적으로는 다를 수 있습니다. Viterbi 알고리즘은 전방 알고리즘의 합을 최댓값으로 바꾸고, 어느 이전 상태에서 왔는지 기록했다가 끝에서 거꾸로 따라갑니다. 곱의 최댓값을 다루므로 로그 공간의 덧셈으로 계산합니다.
+
+::: {.callout-note collapse="true"}
+## 수식으로 보기: Viterbi 재귀
+$$ \delta_1(k) = \log \pi_k + \log e_1(k), \qquad \delta_t(k) = \log e_t(k) + \max_j \big[\delta_{t-1}(j) + \log A_{jk}\big] $$
+$\psi_t(k) = \arg\max_j [\delta_{t-1}(j) + \log A_{jk}]$를 저장해 두고, $\hat z_T = \arg\max_k \delta_T(k)$에서 출발해 $\hat z_{t} = \psi_{t+1}(\hat z_{t+1})$로 거꾸로 따라갑니다. $\max_k \delta_T(k) = \max_{z} \log p(x_{1:T}, z_{1:T})$입니다.
+:::
+
+::: {.callout-warning}
+**사후 argmax 경로는 "경로"가 아닐 수 있습니다.** 구간별로 따로 고른 상태를 이어 붙인 것이라, 전이확률이 0인 이동이 끼어 결합확률이 0인 경로가 나올 수도 있습니다(Rabiner 1989). 반대로 Viterbi 경로는 최빈값 하나일 뿐이라 그 경로의 사후확률 자체는 대개 아주 작고, 구간별 불확실성을 전혀 알려 주지 않습니다. 맞힌 구간 수의 기댓값을 최대화하려면 사후 argmax, 일관된 분절(segmentation)이 필요하면 Viterbi를 쓰고, 어느 쪽이든 경계 근처의 불확실성은 $\gamma_t(k)$로 따로 보고해야 합니다.
+:::
+
+## 학습: Baum–Welch는 EM이다
+
+지금까지는 모수를 안다고 가정했습니다. 상태를 알면 모수는 세기만 하면 되고(프로모터 구간 중 H3K4me3가 1인 비율), 모수를 알면 상태의 사후분포를 구할 수 있습니다. 이 순환을 반복하는 것이 **Baum–Welch 알고리즘**이고, 기댓값 최대화(expectation–maximization, EM; Dempster, Laird & Rubin 1977)의 HMM판입니다. E-단계는 forward–backward로 $\gamma_t(k)$와 $\xi_t(j,k)$를 구하고, M-단계는 이 사후확률을 "소수점 카운트"로 써서 비율을 다시 계산합니다.
+
+순수한 최대가능도(MLE)에는 약점이 있습니다. 어떤 상태에 배정된 구간이 12개뿐이고 그 12개 모두 H3K4me3가 1이면 MLE는 $\hat\theta = 12/12 = 1$이고, H3K4me3가 0인 구간은 그 상태일 확률이 정확히 0이 됩니다. [W2](02_conjugate.qmd)의 베타–이항 켤레가 해법입니다. 방출확률에 $\text{Beta}(1+\lambda, 1+\lambda)$, 초기확률과 전이행렬의 각 행에 $\text{Dirichlet}(1+\lambda, \dots, 1+\lambda)$ 사전분포를 주고 사후 최빈값(MAP)을 구하면, M-단계에서 기대 카운트에 **의사카운트(pseudocount)** $\lambda$를 더하기만 하면 됩니다. $\lambda = 1$이면 위 예는 $(12+1)/(12+2) = 0.929$입니다. 이 MAP-EM에서도 로그사후(로그가능도 + 로그사전)는 반복마다 감소하지 않지만, **전역 최적은 보장되지 않습니다.** 초기값에 따라 다른 국소 최적(local optimum)에 멈추므로 여러 초기값에서 돌려 로그사후가 가장 큰 것을 고릅니다.
+
+::: {.callout-note collapse="true"}
+## 수식으로 보기: MAP-EM의 M-단계
+$$ \hat A_{jk} = \frac{\sum_{t=1}^{T-1} \xi_t(j,k) + \lambda}{\sum_{t=1}^{T-1} \sum_{k'} \xi_t(j,k') + K\lambda}, \qquad \hat\theta_{km} = \frac{\sum_{t} \gamma_t(k)\, x_{tm} + \lambda}{\sum_t \gamma_t(k) + 2\lambda}, \qquad \hat\pi_k = \frac{\gamma_1(k) + \lambda}{1 + K\lambda} $$
+$\text{Beta}(a,b)$ 사전에 (기대) 카운트 $n$번 중 $s$번을 더한 사후 $\text{Beta}(s+a,\, n-s+b)$의 최빈값이 $(s + a - 1)/(n + a + b - 2)$이므로 $a = b = 1+\lambda$에서 가운데 식이 되고, $\text{Dirichlet}(1+\lambda, \dots)$의 최빈값도 같은 방식으로 첫째·셋째 식을 줍니다. 반복마다 $\log p(x \mid \pi, A, \theta) + \log p(\pi, A, \theta)$가 감소하지 않습니다. $\lambda = 0$이면 보통의 Baum–Welch(MLE)입니다.
+:::
+
+## 실습: base R로 직접 구현
+
+### (1) 가상의 데이터
+
+아래는 **가상의 데이터**입니다. 상태 5개, 표지 5개, 구간 3000개(200bp 기준 600kb)를 만듭니다. 방출확률은 앞에서 말한 생물학적 경향만 흉내 낸 값이고, 자기전이는 0.90~0.97로 끈적하게(sticky) 둡니다.
+
+```{r}
+marks  <- c("H3K4me3", "H3K27ac", "H3K4me1", "H3K36me3", "H3K27me3")
+states <- c("프로모터", "인핸서", "전사", "억제", "비활성"); n_state <- 5; n_mark <- 5; n_bin <- 3000
+emis_true <- rbind(c(0.90, 0.80, 0.40, 0.05, 0.03),   # 프로모터: H3K4me3, H3K27ac
+                   c(0.05, 0.60, 0.85, 0.08, 0.03),   # 인핸서: H3K4me1, H3K27ac
+                   c(0.02, 0.05, 0.10, 0.80, 0.03),   # 전사: H3K36me3
+                   c(0.05, 0.02, 0.10, 0.03, 0.75),   # 억제(Polycomb): H3K27me3
+                   c(0.03, 0.03, 0.04, 0.03, 0.04))   # 비활성: 모두 낮음
+dimnames(emis_true) <- list(states, marks)            # theta_km = p(표지 m = 1 | 상태 k)
+trans_true <- rbind(c(0.900, 0.030, 0.040, 0.010, 0.020),   # 행 합 1, 자기전이가 큼
+                    c(0.020, 0.900, 0.020, 0.010, 0.050),
+                    c(0.010, 0.010, 0.960, 0.005, 0.015),
+                    c(0.010, 0.005, 0.005, 0.960, 0.020),
+                    c(0.006, 0.008, 0.008, 0.008, 0.970))
+init_true <- rep(1 / n_state, n_state); set.seed(11)
+z_true <- integer(n_bin); z_true[1] <- sample(n_state, 1, prob = init_true)
+for (t in 2:n_bin) z_true[t] <- sample(n_state, 1, prob = trans_true[z_true[t - 1], ])  # 숨은 경로
+x <- matrix(rbinom(n_bin * n_mark, 1, emis_true[z_true, ]), n_bin, n_mark, dimnames = list(NULL, marks))  # 0/1 관측
+# log e_t(k) = sum_m [x_tm log theta_km + (1 - x_tm) log(1 - theta_km)] 를 행렬곱 두 번으로: T x K
+bern_log_emis <- function(x, p) x %*% t(log(p)) + (1 - x) %*% t(log(1 - p))
+print(table(factor(states[z_true], levels = states))); cat("참 경로의 조각(segment) 수:", sum(diff(z_true) != 0) + 1, "\n")
+```
+
+### (2) forward_backward와 viterbi
+
+아래 두 함수는 [W12](12_cnv_calling.qmd)에서 **그대로 복사해** 씁니다. 방출의 종류와 무관하게 `log_emis`(T x K 로그 방출 행렬)만 받도록 만든 이유입니다. 시점 루프 안은 길이 $K$ 벡터 연산이라 $T=5000$, $K=5$에서도 0.1초 안쪽입니다.
+
+```{r}
+forward_backward <- function(log_emis, trans, init) {
+  n_t <- nrow(log_emis); n_k <- ncol(log_emis)
+  m_t <- apply(log_emis, 1, max)                 # 시점별 최댓값 (언더플로 방지)
+  emis <- exp(log_emis - m_t)                    # 척도화한 방출: 각 행의 최댓값이 1
+  alpha <- matrix(0, n_t, n_k); r <- matrix(0, n_t, n_k); scale <- numeric(n_t)
+  a <- init * emis[1, ]; scale[1] <- sum(a); alpha[1, ] <- a / scale[1]
+  for (t in seq_len(n_t)[-1]) {                  # 전방: (alpha_{t-1} A) * e_t 를 정규화
+    a <- drop(alpha[t - 1, ] %*% trans) * emis[t, ]
+    scale[t] <- sum(a); alpha[t, ] <- a / scale[t]
+  }
+  r[n_t, ] <- 1
+  for (t in rev(seq_len(n_t - 1))) {             # 후방: A (e_{t+1} * r_{t+1}) / c_{t+1}
+    r[t, ] <- drop(trans %*% (emis[t + 1, ] * r[t + 1, ])) / scale[t + 1]
+  }
+  post <- alpha * r; post <- post / rowSums(post)  # gamma_t(k) = p(z_t = k | x_1:T)
+  list(post = post, loglik = sum(log(scale)) + sum(m_t),   # alpha, r, scale, emis 는 Baum-Welch 용
+       alpha = alpha, r = r, scale = scale, emis = emis)
+}
+viterbi <- function(log_emis, trans, init) {
+  n_t <- nrow(log_emis); n_k <- ncol(log_emis); log_trans <- log(trans)
+  back <- matrix(0L, n_t, n_k)                   # back[t, k]: t 에서 상태 k 로 올 때 최선의 이전 상태
+  delta <- log(init) + log_emis[1, ]
+  for (t in seq_len(n_t)[-1]) {
+    cand <- delta + log_trans                    # cand[j, k] = delta_{t-1}(j) + log A[j, k]
+    back[t, ] <- max.col(t(cand), ties.method = "first")
+    delta <- cand[cbind(back[t, ], 1:n_k)] + log_emis[t, ]
+  }
+  path <- integer(n_t); path[n_t] <- which.max(delta)
+  for (t in rev(seq_len(n_t - 1))) path[t] <- back[t + 1, path[t + 1]]   # 역추적
+  path
+}
+toy_le <- sapply(toy_theta, function(p) dbinom(toy_x, 1, p, log = TRUE)); toy_fb <- forward_backward(toy_le, toy_trans, toy_init)
+cat("장난감 예 확인 - 전방:", signif(exp(toy_fb$loglik), 4), "/ 나열:", signif(sum(joint), 4), "/ p(z_2 = 활성 | x):",
+    round(toy_fb$post[2, 1], 3), "/ Viterbi:", viterbi(toy_le, toy_trans, toy_init), "\n")
+```
+
+### (3) 참 모수로 상태 해독(decoding)
+
+```{r}
+log_emis <- bern_log_emis(x, emis_true)
+fb <- forward_backward(log_emis, trans_true, init_true); vit <- viterbi(log_emis, trans_true, init_true)
+post_max <- max.col(fb$post); max_prob <- apply(fb$post, 1, max)   # 구간별 사후 argmax와 그 확률
+cat(sprintf("로그가능도 %.1f / 사후 최대확률 < 0.8 인 구간 비율 %.3f\n", fb$loglik, mean(max_prob < 0.8)))
+cat(sprintf("실제 정확도: Viterbi %.4f / 사후 argmax %.4f / 두 경로가 다른 구간 %d개\n",
+            mean(vit == z_true), mean(post_max == z_true), sum(vit != post_max)))
+cat(sprintf("모형이 예상한 정확도: Viterbi %.4f / 사후 argmax %.4f\n", mean(fb$post[cbind(1:n_bin, vit)]), mean(max_prob)))
+print(table(factor(states[z_true], levels = states), factor(states[vit], levels = states), dnn = c("참", "Viterbi")))
+```
+
+Viterbi가 97.7%, 사후 argmax가 97.5%를 맞혔습니다. 이번 실현에서는 Viterbi가 조금 더 맞혔지만, 모형이 스스로 예상한 정확도(사후확률의 평균)는 사후 argmax가 0.9775로 Viterbi의 0.9767보다 큽니다. 사후 argmax는 맞힌 구간 수의 **기댓값**을 최대화하는 규칙이라, 한 번의 실현에서는 이렇게 뒤집힐 수 있습니다. 오류는 주로 전사·억제·인핸서가 비활성과 뒤섞이는 경우입니다. 조각 가장자리에서 표지가 우연히 전부 0으로 나오면 비활성과 구분하기 어렵기 때문입니다. H3K27ac를 함께 가진 프로모터와 인핸서 사이의 혼동(프로모터 → 인핸서 9개)이 그다음입니다. 사후 최대확률이 0.8 미만인 불확실한 구간은 전체의 4.3%입니다.
+
+### (4) 트랙 그림: 유전체 브라우저처럼 300개 구간 보기
+
+```{r}
+#| fig-height: 7.5
+state_col <- c("#c0392b", adjustcolor("#c0392b", alpha.f = 0.35), "#1a6e3c", "#2c7fb8", "grey85")
+idx <- 551:850; xlab_bin <- "구간 번호 (200bp)"; par(mfrow = c(3, 1), mar = c(4, 8, 2.5, 1), oma = c(2, 0, 0, 0))
+image(idx, 1:n_mark, x[idx, ], col = c("white", "#1a6e3c"), yaxt = "n",
+      main = "표지의 0/1 신호 (가상의 데이터)", xlab = xlab_bin, ylab = "")
+axis(2, at = 1:n_mark, labels = marks, las = 1, cex.axis = 0.8); title(ylab = "표지", line = 6.5)
+image(idx, 1:3, cbind(post_max[idx], vit[idx], z_true[idx]), col = state_col, breaks = 0:n_state + 0.5,
+      yaxt = "n", main = "참 상태와 해독 결과", xlab = xlab_bin, ylab = "")
+axis(2, at = 1:3, labels = c("사후 argmax", "Viterbi", "참 상태"), las = 1, cex.axis = 0.8); title(ylab = "경로", line = 6.5)
+plot(NA, xlim = range(idx) + c(-0.5, 0.5), ylim = c(0, 1), xaxs = "i", yaxs = "i", xlab = xlab_bin, ylab = "사후확률",
+     main = "사후 상태확률 p(z_t | x)  (빨간 눈금: 최대확률 < 0.8)")
+cum <- t(apply(fb$post[idx, ], 1, cumsum))      # 상태별 누적 사후확률 -> 쌓은 막대
+rect(rep(idx - 0.5, n_state), cbind(0, cum[, -n_state]), rep(idx + 0.5, n_state), cum,
+     col = rep(state_col, each = length(idx)), border = NA)
+unc <- idx[max_prob[idx] < 0.8]; points(unc, rep(1.05, length(unc)), pch = "|", col = "#c0392b", xpd = NA)
+par(fig = c(0, 1, 0, 1), oma = c(0, 0, 0, 0), mar = c(0, 0, 0, 0), new = TRUE)   # 범례 전용 겹칠 층
+plot(0, 0, type = "n", bty = "n", xaxt = "n", yaxt = "n", xlab = "", ylab = "")
+legend("bottom", legend = states, fill = state_col, horiz = TRUE, bty = "n", cex = 0.9)
+```
+
+사후확률 막대는 조각 내부에서는 한 색으로 꽉 차 있고 경계에서만 여러 색이 섞입니다. 빨간 눈금이 몰리는 곳이 불확실한 경계이며, 이 정보는 Viterbi 경로 한 줄에서는 보이지 않습니다.
+
+### (5) Baum–Welch: 모수를 모를 때
+
+이제 참 모수를 버리고 데이터만으로 학습합니다. 방출 초기값은 무작위, 전이 초기값은 자기전이 0.9로 두고, 의사카운트 $\lambda = 1$을 씁니다. 초기값 네 개에서 각각 돌립니다.
+
+```{r}
+baum_welch <- function(x, K, n_iter = 50, pseudo = 1, seed = 1, tol = 1e-3) {
+  set.seed(seed); n_t <- nrow(x); n_m <- ncol(x)
+  emis_p <- matrix(runif(K * n_m, 0.1, 0.9), K, n_m)        # 방출 초기값: 무작위
+  trans <- matrix(0.1 / (K - 1), K, K); diag(trans) <- 0.9   # 전이 초기값: 끈적하게
+  init <- rep(1 / K, K); log_post <- numeric(0)
+  for (it in 1:n_iter) {
+    fb_it <- forward_backward(bern_log_emis(x, emis_p), trans, init)   # E-단계
+    log_prior <- pseudo * (sum(log(emis_p)) + sum(log(1 - emis_p)) + sum(log(trans)) + sum(log(init)))
+    log_post <- c(log_post, fb_it$loglik + log_prior)                  # 감소하지 않아야 함
+    if (it > 1 && log_post[it] - log_post[it - 1] < tol) break
+    g <- fb_it$post                                                    # gamma_t(k), 아래는 sum_t xi_t(j, k)
+    xi_sum <- trans * crossprod(fb_it$alpha[-n_t, ], fb_it$emis[-1, ] * fb_it$r[-1, ] / fb_it$scale[-1])
+    trans  <- (xi_sum + pseudo) / rowSums(xi_sum + pseudo)             # M-단계 (MAP)
+    emis_p <- (crossprod(g, x) + pseudo) / (colSums(g) + 2 * pseudo)
+    init   <- (g[1, ] + pseudo) / (1 + K * pseudo)
+  }
+  list(emis = emis_p, trans = trans, init = init, log_post = log_post, n_iter = it)
+}
+fits <- lapply(1:4, function(s) baum_welch(x, K = 5, n_iter = 40, pseudo = 1, seed = s))
+final_lp <- sapply(fits, function(f) tail(f$log_post, 1)); best <- fits[[which.max(final_lp)]]
+start_tab <- data.frame(1:4, sapply(fits, `[[`, "n_iter"), round(final_lp, 1))
+names(start_tab) <- c("seed", "반복수", "로그사후"); print(start_tab)
+cat("로그사후가 단조 증가했나:", all(sapply(fits, function(f) all(diff(f$log_post) > -1e-8))), "\n")
+print(round(fits[[3]]$emis, 2))                  # 국소 최적 하나의 방출확률
+# 의사카운트의 효과: 자료가 적을 때(처음 400구간) lambda = 0 (MLE) 과 lambda = 1 (MAP) 비교
+fit_mle <- baum_welch(x[1:400, ], K = 5, n_iter = 40, pseudo = 0, seed = 4)
+fit_map <- baum_welch(x[1:400, ], K = 5, n_iter = 40, pseudo = 1, seed = 4)
+cat("가장 작은 방출확률: MLE", signif(min(fit_mle$emis), 3), "/ MAP", signif(min(fit_map$emis), 3), "\n")
+seed_col <- c("#1a6e3c", "#c0392b", "#2c7fb8", "grey60"); lp_mat <- sapply(fits, function(f) c(f$log_post, rep(NA, 40 - length(f$log_post))))
+matplot(2:40, lp_mat[-1, ], type = "l", lty = 1, lwd = 2, col = seed_col,
+        main = "초기값 4개에서 출발한 MAP-EM", xlab = "EM 반복", ylab = "로그가능도 + 로그사전")
+legend("bottomright", legend = paste("seed", 1:4), col = seed_col, lwd = 2, bty = "n")
+```
+
+네 번 모두 로그사후가 단조 증가했지만 도착점은 모두 달랐습니다. seed 4만 20회 만에 수렴해 가장 높은 값(-4465.3)에 도달했고, 나머지는 40회가 지나도 250 이상 낮은 곳에 머뭅니다. 출력한 seed 3의 방출확률을 보면 H3K36me3가 높은 상태가 셋(1, 3, 4행)으로 쪼개졌고, 프로모터와 인핸서가 한 상태(5행)로, 억제와 비활성이 한 상태(2행)로 뭉쳐 있습니다. 전역 최적 보장이 없으므로 초기값 여러 개는 선택이 아니라 필수입니다. 한편 처음 400구간만으로 학습한 MLE에서는 방출확률 하나가 $10^{-20}$ 수준으로 무너졌습니다(MAP의 최솟값은 0.0185). 그 상태에서 해당 표지가 한 번이라도 1로 나오면 그 구간은 사실상 그 상태가 될 수 없습니다. 의사카운트는 이 붕괴를 막는 가장 값싼 사전분포입니다.
+
+### (6) 상태에 이름 붙이기와 라벨 교환
+
+학습된 상태의 **번호는 아무 의미가 없습니다.** 상태 1과 상태 3의 이름을 맞바꿔도 가능도가 똑같기 때문입니다(라벨 교환, label switching). ChromHMM도 비지도 학습 뒤 사람이 방출 히트맵을 보고 "H3K4me3와 H3K27ac가 높으니 활성 프로모터"처럼 이름을 붙입니다. 여기서는 참 방출행렬을 알고 있으므로, 5! = 120개 순열 중 제곱거리가 가장 작은 것으로 짝지은 뒤 정확도를 잽니다.
+
+```{r}
+all_perms <- function(n) {                       # 1..n 의 모든 순열 (n! x n 행렬)
+  if (n == 1) return(matrix(1L)); p <- all_perms(n - 1)
+  do.call(rbind, lapply(1:n, function(i) cbind(i, p + (p >= i))))
+}
+perm <- all_perms(n_state)
+cost <- apply(perm, 1, function(pm) sum((best$emis[pm, ] - emis_true)^2))  # 학습 상태 pm[k] <-> 참 상태 k
+match_k <- perm[which.min(cost), ]
+to_true <- integer(n_state); to_true[match_k] <- 1:n_state                # 학습 번호 -> 참 번호
+vit_hat <- viterbi(bern_log_emis(x, best$emis), best$trans, best$init)
+cat("학습 상태 1~5의 이름:", states[to_true], sprintf("\n정확도: 번호 그대로 %.3f / 짝지은 뒤 %.3f\n",
+    mean(vit_hat == z_true), mean(to_true[vit_hat] == z_true)))
+print(round(rbind(true = setNames(diag(trans_true), states), learned = diag(best$trans)[match_k]), 3))   # 자기전이 비교 (참 상태 순서)
+draw_heat <- function(mat, ylabs, main) {        # 상태(행) x 표지(열), 첫 행이 맨 위
+  image(1:n_mark, 1:n_state, t(mat[n_state:1, ]), col = colorRampPalette(c("white", "#1a6e3c"))(50),
+        zlim = c(0, 1), axes = FALSE, main = main, xlab = "표지", ylab = "")
+  axis(1, at = 1:n_mark, labels = FALSE); axis(2, at = n_state:1, labels = ylabs, las = 1, cex.axis = 0.8)
+  mtext(marks, side = 1, at = 1:n_mark, line = rep(c(0.8, 1.8), length.out = n_mark), cex = 0.7)  # 두 줄로 엇갈려 표기
+  text(rep(1:n_mark, each = n_state), rep(n_state:1, n_mark), sprintf("%.2f", mat), cex = 0.75)
+}
+par(mfrow = c(1, 2), mar = c(4, 8.5, 3, 1))
+draw_heat(emis_true, states, "참 방출확률 (가상)"); title(ylab = "참 상태", line = 7.3)
+draw_heat(best$emis, paste0("상태", 1:n_state, " (", states[to_true], ")"), "학습된 방출확률"); title(ylab = "학습된 상태 번호", line = 7.3)
+```
+
+학습된 번호를 그대로 참 상태와 비교하면 정확도가 0.132로 무의미하지만, 방출 패턴으로 짝지으면 0.974로 참 모수를 쓸 때(0.977)와 거의 같습니다. 자기전이는 참값보다 조금 작게(0.885~0.964) 추정됐습니다. 오른쪽 히트맵의 행 순서는 왼쪽과 다르지만 각 행의 패턴은 한눈에 대응됩니다. 실제 데이터에서는 참 행렬이 없으므로 이 짝짓기를 **표지에 대한 생물학적 지식**으로 합니다. 세포형마다 따로 학습하면 상태 번호가 서로 달라지므로, ChromHMM처럼 여러 세포형 자료를 이어 붙여 한 모형을 학습하는 것이 비교에 유리합니다.
+
+## 상태 수 K 고르기
+
+K는 사용자가 정합니다. BIC(모수 수 $d = K(K-1) + KM + (K-1)$)를 쓸 수는 있지만, 구간이 수백만 개이면 모형 가정이 조금만 어긋나도 상태를 늘려 그 어긋남을 흡수하는 가능도 이득이 벌점보다 커질 수 있습니다. 이웃 구간이 독립이 아니어서 BIC의 표본 크기를 무엇으로 볼지도 애매합니다. 그래서 ChromHMM을 쓰는 연구는 보통 여러 K로 학습한 뒤, 상태들의 방출 패턴이 서로 겹치지 않고 생물학적으로 해석 가능한 K를 고릅니다. Ernst & Kellis(2010)는 CD4+ T 세포의 수십 개 표지로 51개 상태를 학습했고, Roadmap Epigenomics Consortium(2015)은 핵심 표지 5개(H3K4me3, H3K4me1, H3K36me3, H3K27me3, H3K9me3)로 **15-상태 핵심 모형(core model)**을 학습해 모든 참조 후성유전체에 같은 상태 이름을 달았습니다.
+
+::: {.callout-warning}
+**HMM이 몰래 하는 가정들.**
+
+- **표지 간 조건부 독립.** 같은 상태 안에서도 H3K4me3와 H3K27ac는 함께 움직이는 경향이 있습니다. 모형은 이 상관을 설명하려고 상태를 더 잘게 쪼갤 수 있습니다. 새 상태가 생물학적 구분인지 가정 위반의 흔적인지 따져야 합니다.
+- **기하분포 지속시간.** 자기전이가 $a$면 한 조각의 길이는 $p(d) = a^{d-1}(1-a)$, 평균 $1/(1-a)$ 구간입니다. $a=0.9$면 평균 10구간(2kb), $a=0.97$이면 약 33구간입니다. 이 분포는 길이 1에서 가장 크고 단조 감소하므로 "대략 몇 kb"라는 전형적 길이를 표현하지 못합니다. 이를 풀려면 지속시간 분포를 따로 두는 반마르코프(semi-Markov) 모형이 필요합니다.
+- **이진화 문턱값.** 0/1은 문턱값과 시퀀싱 깊이에 따라 달라지고 상태 정의도 따라 움직입니다. 깊이가 다른 두 시료의 상태 차이가 생물학이 아니라 이진화의 차이일 수 있습니다.
+- **라벨 교환과 모수 불확실성.** 상태 번호는 실행마다 바뀝니다. 또 여기서 구한 $\gamma_t(k)$는 학습된 모수를 참값처럼 꽂아 넣은 것이라 모수 추정의 불확실성이 빠져 있습니다. [W7](07_hierarchical_modelcomp.qmd)의 경험적 베이즈와 같은 성격입니다.
+:::
+
+## 실습: 패키지로 풀기
+
+CI 환경에 패키지가 없어 실행하지 않습니다. CRAN의 `HMM` 패키지는 시점마다 기호 하나만 방출하므로, 표지 5개의 0/1 조합을 $2^5 = 32$개 기호로 인코딩합니다. 방출행렬을 베르누이의 곱으로 채우면 위 모형과 같지만, `baumWelch()`로 학습하면 32개 기호의 범주형 방출(상태마다 모수 31개)을 추정하므로 조건부 독립 가정이 없는 더 큰 모형이 됩니다.
+
+```{r}
+#| eval: false
+library(HMM)
+sym <- as.character(x %*% 2^(0:4) + 1)                    # 0/1 패턴 -> 기호 "1"~"32"
+all_x <- as.matrix(expand.grid(rep(list(0:1), n_mark)))    # 기호 s 의 0/1 패턴 (s = 1..32)
+emis_sym <- t(exp(bern_log_emis(all_x, emis_true)))        # K x 32, 베르누이의 곱
+hmm0 <- initHMM(States = states, Symbols = as.character(1:32), startProbs = init_true,
+                transProbs = trans_true, emissionProbs = emis_sym)
+vit_pkg <- HMM::viterbi(hmm0, sym); post_pkg <- HMM::posterior(hmm0, sym)   # 상태 이름 벡터, 상태 x 시점 행렬
+bw <- baumWelch(hmm0, sym, maxIterations = 50, pseudoCount = 1); round(bw$hmm$transProbs, 3)
+```
+
+ChromHMM 자체는 Java 명령행 도구입니다. 먼저 `BinarizeBam`으로 BAM 파일을 200bp 구간의 0/1로 이진화하고, `LearnModel`에 상태 수(여기서는 15)를 주어 학습합니다. 학습 결과로 방출·전이 행렬 그림과 구간별 상태(segments) BED 파일이 나옵니다. `cellmarkfiletable.txt`는 세포형·표지·파일 이름을 탭으로 구분한 표이고, 염색체 길이 파일은 ChromHMM 배포본의 `CHROMSIZES` 폴더에 있습니다.
+
+```bash
+java -mx4000M -jar ChromHMM.jar BinarizeBam -b 200 chrom_sizes.txt bam_dir cellmarkfiletable.txt binarized_dir
+java -mx4000M -jar ChromHMM.jar LearnModel binarized_dir model_15 15 hg38
+```
+
+## 연습문제
+
+### 문제 1. 전방 알고리즘 = 모든 경로의 합
+
+장난감 HMM에서 구간을 10개로 늘린 관측 `c(1, 1, 0, 0, 1, 0, 1, 1, 1, 0)`에 대해 $2^{10} = 1024$개 경로를 모두 나열해 로그가능도와 $p(z_t = \text{활성} \mid x)$를 구하고, `forward_backward`·`viterbi` 결과와 비교하십시오.
+
+::: {.callout-note collapse="true"}
+## 풀이
+```{r}
+x10 <- c(1, 1, 0, 0, 1, 0, 1, 1, 1, 0); n10 <- length(x10); p10 <- as.matrix(expand.grid(rep(list(1:2), n10)))  # 1024 x 10
+le10 <- sapply(toy_theta, function(p) dbinom(x10, 1, p, log = TRUE))
+lj <- apply(p10, 1, function(z) log(toy_init[z[1]]) + sum(log(toy_trans[cbind(z[-n10], z[-1])])) +
+              sum(le10[cbind(1:n10, z)]))                      # 경로별 log p(z, x)
+w <- exp(lj - max(lj)); w <- w / sum(w); post_enum <- colSums(w * (p10 == 1))   # 경로 사후확률 -> 구간별 합
+fb10 <- forward_backward(le10, toy_trans, toy_init)
+cat("로그가능도: 나열", round(max(lj) + log(sum(exp(lj - max(lj)))), 6), "/ 전방", round(fb10$loglik, 6), "\n")
+cat("사후확률 최대 차이:", signif(max(abs(post_enum - fb10$post[, 1])), 2),
+    "/ Viterbi = 나열 최빈 경로:", all(viterbi(le10, toy_trans, toy_init) == p10[which.max(lj), ]), "\n")
+```
+
+세 가지가 반올림 오차 안에서 일치합니다. 나열은 경로 $K^T$개를 모두 계산하고, 전방 알고리즘은 곱셈 $TK^2$번 정도로 끝납니다.
+:::
+
+### 문제 2. 자기전이 확률과 조각 수
+
+참 방출행렬은 그대로 두고, 전이행렬을 "자기전이 $a$, 나머지는 $(1-a)/4$씩"으로 바꿔 $a \in \{0.5, 0.8, 0.9, 0.97, 0.999\}$에서 Viterbi 경로의 조각 수와 정확도를 구하십시오.
+
+::: {.callout-note collapse="true"}
+## 풀이
+```{r}
+a_set <- c(0.5, 0.8, 0.9, 0.97, 0.999)
+res_a <- t(sapply(a_set, function(a) {
+  tr <- matrix((1 - a) / (n_state - 1), n_state, n_state); diag(tr) <- a
+  v <- viterbi(log_emis, tr, init_true)
+  c(a, sum(diff(v) != 0) + 1, round(mean(v == z_true), 3))
+}))
+colnames(res_a) <- c("자기전이", "조각수", "정확도"); print(res_a); cat("참 경로의 조각 수:", sum(diff(z_true) != 0) + 1, "\n")
+```
+
+자기전이가 0.5면 이웃 정보를 거의 빌리지 않아 잡음 하나하나에 반응하고, 조각이 494개로 부서지며 정확도도 0.905로 떨어집니다. 반대로 0.999면 짧은 프로모터·인핸서 조각을 주변 상태에 흡수해 조각 수가 127개로 참값(155개)보다 크게 줄고 정확도도 0.971로 내려갑니다. 이 데이터에서는 0.97 부근이 가장 좋았습니다. 자기전이는 "상태가 얼마나 오래 이어진다고 믿는가"라는 사전분포입니다.
+:::
+
+### 문제 3. 사후 argmax와 Viterbi가 갈리는 곳
+
+실습 (3)의 `vit`과 `post_max`가 다른 구간을 찾고, 두 경로의 결합 로그확률 $\log p(x, z)$를 비교하십시오.
+
+::: {.callout-note collapse="true"}
+## 풀이
+```{r}
+path_logprob <- function(path, log_emis, trans, init) {   # log p(x_1:T, z_1:T)
+  n_t <- length(path)
+  log(init[path[1]]) + sum(log(trans[cbind(path[-n_t], path[-1])])) + sum(log_emis[cbind(1:n_t, path)])
+}
+diff_bin <- which(vit != post_max)
+cat("다른 구간 수:", length(diff_bin), "/ 그 구간의 평균 사후 최대확률:", round(mean(max_prob[diff_bin]), 3), "\n")
+cat("log p(x, z): Viterbi", round(path_logprob(vit, log_emis, trans_true, init_true), 1),
+    "/ 사후 argmax", round(path_logprob(post_max, log_emis, trans_true, init_true), 1), "\n")
+show <- diff_bin[1] + (-2:2)                     # 첫 번째로 갈리는 구간 주변
+print(data.frame(bin = show, true = z_true[show], viterbi = vit[show], post_argmax = post_max[show], max_prob = round(max_prob[show], 2)))
+```
+
+두 경로는 19개 구간에서 갈리고, 그 구간들의 평균 사후 최대확률은 0.539로 모형이 거의 반반으로 망설이는 곳입니다. 첫 번째로 갈리는 200번 구간은 참 상태가 전사(3)인데, 사후 argmax는 전사를, Viterbi는 앞 구간들과 이어지는 비활성(5)을 골랐습니다. 결합 로그확률은 정의상 Viterbi(-4368.0)가 사후 argmax 경로(-4386.8)보다 큽니다. 사후 argmax 경로는 구간별로는 최선이지만 경로 전체로 보면 더 드문 조합입니다.
+:::
+
+## 정리
+
+- HMM은 숨은 상태의 마르코프 사슬(초기확률 $\pi$, 전이행렬 $A$)과 상태별 방출($\theta$)로 이루어집니다. ChromHMM은 200bp 구간의 이진화된 표지를 베르누이의 곱으로 방출합니다.
+- forward–backward는 $K^T$개 경로의 합을 $O(TK^2)$로 계산하며, 결과 $\gamma_t(k) = p(z_t = k \mid x)$는 모수가 주어졌을 때 숨은 상태의 사후분포입니다. 척도화로 언더플로 없이 로그가능도를 얻습니다.
+- Viterbi는 결합확률이 가장 큰 한 경로, 사후 argmax는 구간별 최선의 상태입니다. 둘은 불확실한 경계에서 갈리고, 불확실성은 $\gamma_t(k)$로 보고합니다.
+- Baum–Welch는 EM입니다. Beta·Dirichlet 사전분포를 더한 MAP-EM은 의사카운트로 0/1 붕괴를 막고 로그사후를 단조 증가시키지만, 국소 최적 때문에 여러 초기값이 필요합니다.
+- 학습된 상태 번호는 임의입니다. 방출 히트맵을 보고 이름을 붙이고, 조건부 독립·기하분포 지속시간·이진화 문턱값이라는 숨은 가정을 함께 보고합니다.
+
+## 다음 시간
+
+[W12](12_cnv_calling.qmd)에서는 같은 `forward_backward`와 `viterbi`를 복제수 변이(copy number variation, CNV) 탐지에 그대로 씁니다. 숨은 상태는 총 복제수와 소수 대립유전자 복제수의 조합((2,1) 정상, (1,0) 결실, (2,0) 복제수 중립 LOH 등)이고, 방출은 0/1 대신 read depth의 log2 비율과 B 대립유전자 빈도(BAF) 같은 연속형 값입니다. 두 함수는 그대로 두고 `log_emis`를 만드는 부분과 전이행렬만 바꾸며, 경로 전체를 사후에서 뽑는 FFBS를 더합니다.
+

@@ -1,6 +1,8 @@
 project:
   type: website
   execute-dir: project
+  render:
+    - "*.qmd"           # .qmd만 렌더 (CHAPTER_SPEC.md 같은 작성 메모는 사이트에 올리지 않음)
 
 website:
   title: "베이지안 통계"
@@ -29,14 +31,14 @@ website:
           - chapters/05_mcmc_basics.qmd
           - chapters/06_hmc_diagnostics.qmd
           - chapters/07_hierarchical_modelcomp.qmd
-      # - section: "Part 2. 생명정보학 응용"
-      #   contents:
-      #     - chapters/08_finemapping.qmd
-      #     - chapters/09_colocalization.qmd
-      #     - chapters/10_hmm_chromatin.qmd
-      #     - chapters/11_cnv_calling.qmd
-      #     - chapters/12_deconvolution.qmd
-      #     - chapters/13_capstone.qmd
+      - section: "Part 2. 생명정보학 응용"
+        contents:
+          - chapters/08_bayesian_regression.qmd
+          - chapters/09_finemapping.qmd
+          - chapters/10_colocalization.qmd
+          - chapters/11_hmm_chromatin.qmd
+          - chapters/12_cnv_calling.qmd
+          - chapters/13_capstone.qmd
 
   page-footer:
     left: "Copyright 2026, Eunji"
