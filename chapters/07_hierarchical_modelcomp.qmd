@@ -1,0 +1,400 @@
+---
+title: "W7. 계층 모형과 모델 비교"
+description: "부분 통합과 축소, 깔때기 기하와 비중심화 재모수화, PPC·베이즈 인자·WAIC/LOO로 모형을 검사하고 비교하는 법."
+author: "Eunji Ha"
+date: today
+
+format:
+  html:
+    include-in-header:
+      text: |
+        <meta name="ai-title" content="W7. 계층 모형과 모델 비교">
+        <meta name="ai-context" content="
+        이 챕터는 계층 모형(hierarchical model)과 모델 비교를 다룹니다. J개 그룹(가상의 실험 배치 8개)에서 각 그룹 효과 theta_j를 추정할 때 완전 통합(complete pooling, 모든 theta_j가 같다), 무통합(no pooling, theta_j가 서로 무관하다), 부분 통합(partial pooling, theta_j ~ Normal(mu, tau^2))을 비교합니다. 모형은 y_j ~ Normal(theta_j, sigma_j^2), theta_j ~ Normal(mu, tau^2) 이고, 축소 계수(shrinkage factor)는 B_j = sigma_j^2 / (sigma_j^2 + tau^2), 사후 평균은 B_j * mu + (1 - B_j) * y_j, 사후 분산은 (1 - B_j) * sigma_j^2 입니다. 표준오차 sigma_j가 클수록, tau가 작을수록 전체 평균 쪽으로 더 당겨집니다. 이는 limma의 eBayes나 DESeq2의 분산 축소와 같은 계열의 경험적 베이즈(empirical Bayes) 아이디어입니다. tau의 사전분포로는 반코시(half-Cauchy)나 반정규(half-Normal)를 쓰고, tau가 0 근처면 (mu, log tau, theta) 공간이 깔때기(funnel) 모양이 되어 표집이 실패합니다. 해법은 비중심화 재모수화(non-centered parameterization) theta_j = mu + tau * eta_j, eta_j ~ Normal(0,1) 입니다.
+        후반부는 모형 검사와 비교입니다. 사후예측검사(posterior predictive check, PPC)는 사후 표본으로 가짜 데이터 y_rep을 만들어 검정통계량 T(y_rep)의 분포와 관측값 T(y)를 비교하며, 베이지안 p-value는 Pr(T(y_rep) >= T(y)) 로 보수적입니다. 베이즈 인자(Bayes factor)는 주변가능도의 비 BF_12 = p(y | M1) / p(y | M2) 이고 사전분포 폭에 극도로 민감합니다(Lindley/Jeffreys 역설). 정보기준은 편차(deviance)에서 출발해 WAIC = -2 * (lppd - p_waic) 이며, lppd는 관측별 로그 사후예측밀도의 합, p_waic는 관측별 로그가능도의 사후 분산의 합입니다. LOO-CV와 PSIS-LOO는 중요도 표집으로 LOO를 근사하고, loo 패키지의 Pareto k가 0.7을 넘으면 그 관측에서 근사가 불안정합니다. 실무 순서는 PPC 먼저, 예측이 목적이면 LOO/WAIC, 가설 비교가 목적이면 사전분포를 정당화한 베이즈 인자입니다.
+        실습은 base R만 씁니다. 주요 함수는 계층 정규모형의 깁스 표집기 gibbs_hier (theta_j, mu, tau^2, 보조변수 xi의 완전조건부), 중심화/비중심화 로그사후 lp_centered와 lp_noncentered, 확률보행 메트로폴리스 rw_metropolis, 유효표본크기 ess_basic (W6에서 만든 것과 같은 함수: 체인을 split한 뒤 자기상관을 시차 0부터 둘씩 묶어 tau = -1 + 2*sum(짝 합)), WAIC를 직접 계산하는 waic_calc 입니다. p_waic는 관측별 기여도 p_waic_i 로 쪼개 보며 0.4를 넘는 관측이 있으면 WAIC 근사가 불안정하므로 PSIS-LOO를 씁니다. loo와 brms 예시는 실행하지 않고 코드만 보여줍니다.
+        ">
+---
+
+## 학습 목표
+
+- 완전 통합·무통합·부분 통합이 각각 무엇을 가정하는지 설명할 수 있다.
+- 축소(shrinkage)의 크기가 그룹 표준오차와 그룹 간 표준편차 tau에 어떻게 의존하는지 식으로 쓰고 코드로 확인할 수 있다.
+- 계층 정규모형의 완전조건부를 유도해 깁스 표집기(Gibbs sampler)를 직접 구현하고, 깔때기(funnel) 기하를 비중심화 재모수화(non-centered parameterization)로 고칠 수 있다.
+- 사후예측검사(PPC)와 WAIC를 직접 계산해 모형을 검사하고 비교할 수 있다.
+
+## 배치 효과를 여덟 번 재는 상황
+
+RNA-seq 실험을 8개 배치(batch)로 나눠 돌렸다고 합시다. 배치마다 처리군과 대조군을 두고 관심 유전자의 발현 차이를 재면 배치별 추정치 $y_j$와 표준오차 $\sigma_j$가 여덟 쌍 나옵니다. 배치별 표본이 작아 $\sigma_j$가 큽니다. 여기서 질문이 생깁니다. 배치 7의 효과가 33.6이고 배치 8의 효과가 -7.2로 나왔을 때, 정말 두 배치의 효과가 41만큼 다르다고 믿어야 할까요, 아니면 두 숫자 모두 잡음 위에 떠 있는 것일까요. 이 구조는 유전자 2만 개의 발현 변화를 동시에 추정할 때, 환자 수십 명의 개인별 반응을 볼 때, 여러 코호트의 효과 크기를 합칠 때 똑같이 반복됩니다. 그룹은 많고 그룹별 표본은 작습니다. 계층 모형(hierarchical model)은 "그룹들은 서로 다르지만 완전히 무관하지는 않다"는 중간 입장을 모형으로 옮긴 것입니다. 전반부는 이 모형을, 후반부는 만든 모형이 쓸 만한지 검사하고 여러 모형 중 하나를 고르는 도구를 다룹니다.
+
+## 세 가지 선택: 완전 통합, 무통합, 부분 통합
+
+배치별 참 효과를 $\theta_j$라 하면 관측 모형은 $y_j \sim \mathcal{N}(\theta_j, \sigma_j^2)$입니다. $\sigma_j$는 배치 내 표본에서 이미 계산된 값이라 알려진 것으로 봅니다. 남는 질문은 $\theta_1,\dots,\theta_8$ 사이의 관계입니다.
+
+- **완전 통합(complete pooling)**: 모든 $\theta_j$가 같은 값 $\mu$라고 가정하고 배치 간 차이를 전부 잡음으로 돌립니다. 표준오차는 가장 작지만 배치 효과가 실제로 있으면 편향됩니다.
+- **무통합(no pooling)**: $\theta_j$들이 서로 완전히 무관하다고 가정합니다. 추정치는 $y_j$ 그대로입니다. 편향은 없지만 분산이 크고, 그룹이 많으면 "가장 큰 값"이 우연히 부풀려질 확률이 높습니다.
+- **부분 통합(partial pooling)**: $\theta_j \sim \mathcal{N}(\mu, \tau^2)$라는 층을 하나 더 얹습니다. $\tau$가 그룹 간 실제 이질성의 크기이고 데이터가 이 값을 추정합니다. $\tau \to 0$이면 완전 통합, $\tau \to \infty$면 무통합으로 수렴합니다.
+
+::: {.callout-tip}
+부분 통합은 완전 통합과 무통합 사이 어디쯤인지를 사람이 고르는 것이 아니라, **데이터가 $\tau$를 추정해 위치를 정하게** 하는 방법입니다. 배치 간 차이가 실제로 크면 $\tau$가 커져 무통합에 가까워지고, 차이가 잡음 수준이면 $\tau$가 작아져 통합됩니다.
+:::
+
+::: {.callout-note collapse="true"}
+## 수식으로 보기: 축소 계수
+
+$\mu$와 $\tau$를 안다고 하면 $\theta_j$의 사후분포는 정규-정규 켤레 결합([W2](02_conjugate.qmd))으로 바로 나옵니다.
+$$
+\theta_j \mid y_j, \mu, \tau \sim \mathcal{N}\!\left( B_j\,\mu + (1-B_j)\,y_j,\ (1-B_j)\,\sigma_j^2 \right), \qquad B_j = \frac{\sigma_j^{2}}{\sigma_j^{2} + \tau^{2}}
+$$
+$B_j$는 축소 계수(shrinkage factor)로, 0이면 $y_j$를 그대로 쓰고 1이면 $\mu$로 완전히 당겨집니다. $\sigma_j$가 클수록(그 그룹 자료가 부실할수록), $\tau$가 작을수록(그룹들이 비슷할수록) $B_j$가 1에 가까워집니다. 사후 분산 $(1-B_j)\sigma_j^2$는 항상 $\sigma_j^2$보다 작습니다. 다른 그룹의 정보를 빌린 만큼 정밀해집니다.
+:::
+
+## 축소가 다중검정에서 유리한 이유
+
+유전자 2만 개의 발현 변화를 각각 따로 추정하면 참 효과가 0인 유전자 중에도 우연히 큰 $y_j$를 받는 것이 반드시 나옵니다. 무통합 추정치의 최댓값은 참값의 최댓값보다 체계적으로 큽니다. 부분 통합은 $\sigma_j$가 큰, 곧 정보가 적은 추정치를 전체 평균 쪽으로 더 많이 당겨 이 과장을 줄입니다. 개별 추정치는 조금씩 편향되지만 전체 제곱오차 합은 거의 항상 줄어듭니다. 생명정보학 도구들은 이미 이 아이디어를 씁니다. `limma`의 `eBayes()`는 유전자별 분산 추정치를 전체 분산 추세 쪽으로 축소하고, `DESeq2`는 분산과 log fold change를 모두 축소합니다. 둘 다 계층 모형의 상위 모수(hyperparameter)를 사후분포로 다루는 대신 데이터에서 점추정해 꽂아 넣는 **경험적 베이즈(empirical Bayes)**입니다. 이번 주에 만들 완전 베이지안 계층 모형은 같은 구조에서 $\mu$와 $\tau$의 불확실성까지 함께 전파한다는 점만 다릅니다.
+
+## tau의 사전분포와 깔때기
+
+$\tau$는 표준편차라 양수입니다. 예전에는 $\tau^2$에 역감마(inverse-gamma)를 주는 관습이 있었지만, $\tau$가 실제로 0에 가까울 때 역감마는 0 근처를 강하게 밀어내 $\tau$를 과대추정합니다. 지금은 **반코시(half-Cauchy)** 또는 **반정규(half-Normal)**를 권합니다. 둘 다 0에서 밀도가 유한하고 양수이며 꼬리는 반코시가 더 두껍습니다. 그룹 수 $J$가 작으면 척도 선택이 결과를 크게 바꾸므로 효과 크기의 단위를 생각해 정해야 합니다.
+
+::: {.callout-warning}
+$\tau$의 사후분포가 0 근처에 몰리면 $(\mu, \log\tau, \theta_1,\dots,\theta_J)$ 공간이 **깔때기(funnel)** 모양이 됩니다. $\tau$가 작은 영역에서 $\theta_j$들은 $\mu$ 주변의 아주 좁은 구간에만 있을 수 있고, $\tau$가 큰 영역에서는 넓게 퍼질 수 있습니다. 한 가지 이동 폭으로 전체를 훑는 표집기는 깔때기 목으로 내려가지 못하고 $\tau$의 작은 값 쪽을 통째로 놓칩니다. 발산 전이(divergent transition) 경고는 대개 이 상황입니다.
+:::
+
+해법은 **비중심화 재모수화(non-centered parameterization)**입니다. $\theta_j$를 직접 표집하는 대신 $\theta_j = \mu + \tau\,\eta_j$, $\eta_j \sim \mathcal{N}(0,1)$로 쓰고 $\eta_j$를 표집합니다. $\eta$의 사전분포가 $\tau$와 무관한 표준정규라서 깔때기가 풀립니다. 반대로 그룹별 자료가 많아 $\tau$가 확실히 클 때는 중심화가 더 낫습니다.
+
+## 실습: base R로 직접 구현
+
+### (1) 가상의 데이터와 세 가지 추정치
+
+아래는 **가상의 데이터**입니다. 8개 배치의 처리 효과와 표준오차를 코드로 만들고, $\tau$를 주변가능도 $y_j \sim \mathcal{N}(\mu, \sigma_j^2+\tau^2)$로 점추정한 경험적 베이즈 버전을 먼저 봅니다.
+
+```{r}
+set.seed(9)
+n_batch <- 8; batch_id <- paste0("Batch", 1:n_batch)
+sigma_j <- c(15, 10, 16, 11, 9, 11, 10, 18)           # 배치별 표준오차(표본 수가 달라 다름)
+mu_true <- 8; tau_true <- 6                           # 참값
+theta_true <- rnorm(n_batch, mu_true, tau_true)       # 배치별 참 효과 (가상)
+y_j <- round(rnorm(n_batch, theta_true, sigma_j), 1)  # 관측된 효과 추정치 (가상)
+mu_pool <- sum(y_j / sigma_j^2) / sum(1 / sigma_j^2)  # 완전 통합: 정밀도 가중 평균
+neg_log_marg <- function(par) -sum(dnorm(y_j, par[1], sqrt(sigma_j^2 + exp(par[2])^2), log = TRUE))  # 경험적 베이즈
+fit_eb <- optim(c(0, log(5)), neg_log_marg); mu_eb <- fit_eb$par[1]; tau_eb <- exp(fit_eb$par[2])
+b_j <- sigma_j^2 / (sigma_j^2 + tau_eb^2)             # 축소 계수 B_j
+theta_partial <- b_j * mu_eb + (1 - b_j) * y_j        # 부분 통합 추정치
+cat(sprintf("완전통합 mu = %.2f | 경험적 베이즈 mu = %.2f, tau = %.2f\n", mu_pool, mu_eb, tau_eb))
+tab1 <- round(rbind(sigma_j, y_j, theta_partial, b_j), 2)
+rownames(tab1) <- c("표준오차", "무통합 y_j", "부분통합", "축소계수 B_j"); colnames(tab1) <- batch_id; print(tab1)
+plot(1:n_batch, y_j, type = "n", ylim = range(c(y_j, theta_partial)) + c(-4, 8), xaxt = "n",
+     main = "세 가지 통합 방식의 배치별 효과 추정치", xlab = "배치", ylab = "처리 효과 추정치")
+axis(1, at = 1:n_batch, labels = batch_id, cex.axis = 0.75); abline(h = mu_pool, col = "grey60", lwd = 2, lty = 2)
+arrows(1:n_batch, y_j, 1:n_batch, theta_partial, length = 0.08, col = "grey60")  # 축소량
+points(1:n_batch, y_j, pch = 16, col = "#c0392b", cex = 1.3)
+points(1:n_batch, theta_partial, pch = 17, col = "#1a6e3c", cex = 1.3)
+legend("topright", bty = "n", cex = 0.8, legend = c("무통합 (y_j)", "부분통합", "완전통합"),
+       col = c("#c0392b", "#1a6e3c", "grey60"), pch = c(16, 17, NA), lty = c(NA, NA, 2), lwd = c(NA, NA, 2))
+```
+
+화살표 길이가 축소량입니다. 표준오차가 가장 큰 Batch8(se=18)의 축소 계수가 표준오차가 작은 Batch5(se=9)보다 큽니다. 같은 거리만큼 떨어져 있어도 자료가 부실한 배치가 더 많이 당겨집니다.
+
+### (2) 계층 정규모형의 깁스 표집기
+
+$\mu$에는 평평한 사전분포, $\tau$에는 반코시$(0, A)$를 줍니다. 반코시는 보조변수 $\xi$를 하나 넣으면 역감마 두 개의 혼합으로 쓸 수 있어 모든 완전조건부가 표준분포로 떨어집니다.
+
+::: {.callout-note collapse="true"}
+## 수식으로 보기: 완전조건부
+
+$$
+\theta_j \mid \cdot \sim \mathcal{N}\!\left(\frac{y_j/\sigma_j^2 + \mu/\tau^2}{1/\sigma_j^2 + 1/\tau^2},\ \frac{1}{1/\sigma_j^2 + 1/\tau^2}\right), \qquad \mu \mid \cdot \sim \mathcal{N}\!\left(\bar{\theta},\ \tau^2/J\right)
+$$
+$\tau \sim \text{Half-Cauchy}(0, A)$는 $\tau^2 \mid \xi \sim \text{Inv-Gamma}(1/2, 1/\xi)$, $\xi \sim \text{Inv-Gamma}(1/2, 1/A^2)$의 혼합과 같으므로
+$$
+\tau^2 \mid \cdot \sim \text{Inv-Gamma}\!\left(\tfrac{J+1}{2},\ \tfrac{1}{\xi} + \tfrac{1}{2}\textstyle\sum_j (\theta_j-\mu)^2\right), \qquad \xi \mid \cdot \sim \text{Inv-Gamma}\!\left(1,\ \tfrac{1}{A^2} + \tfrac{1}{\tau^2}\right)
+$$
+$J$는 그룹 수, $\bar\theta$는 $\theta_j$들의 산술평균, $A$는 반코시 척도입니다. Inv-Gamma$(a,b)$ 표집은 `1/rgamma(1, shape = a, rate = b)`로 합니다.
+:::
+
+```{r}
+gibbs_hier <- function(y, sigma, n_iter = 5000, a_scale = 25, seed = 1) {
+  set.seed(seed); n_g <- length(y)
+  theta <- y; mu <- mean(y); tau2 <- var(y); xi <- 1     # 초기값
+  out_mu <- numeric(n_iter); out_tau <- numeric(n_iter); out_theta <- matrix(0, n_iter, n_g)
+  for (it in 1:n_iter) {
+    prec  <- 1/sigma^2 + 1/tau2                          # 1) theta_j | mu, tau^2, y
+    theta <- rnorm(n_g, (y/sigma^2 + mu/tau2) / prec, sqrt(1/prec))
+    mu    <- rnorm(1, mean(theta), sqrt(tau2 / n_g))     # 2) mu | theta, tau^2
+    tau2  <- 1 / rgamma(1, shape = (n_g+1)/2, rate = 1/xi + 0.5*sum((theta-mu)^2))  # 3) tau^2 | ..
+    xi    <- 1 / rgamma(1, shape = 1, rate = 1/a_scale^2 + 1/tau2)   # 4) 보조변수
+    out_mu[it] <- mu; out_tau[it] <- sqrt(tau2); out_theta[it, ] <- theta
+  }
+  keep <- (n_iter/2 + 1):n_iter                          # 앞 절반은 번인(burn-in)
+  list(mu = out_mu[keep], tau = out_tau[keep], theta = out_theta[keep, , drop = FALSE])
+}
+fit_pp <- gibbs_hier(y_j, sigma_j, n_iter = 5000, a_scale = 25, seed = 7)
+fmt <- function(v, f) sprintf("%.2f (95%% %.1f ~ %.1f)", f(v), quantile(v, 0.025), quantile(v, 0.975))
+cat("mu  사후평균  ", fmt(fit_pp$mu, mean), "\ntau 사후중앙값", fmt(fit_pp$tau, median), "\n")
+print(round(colMeans(fit_pp$theta), 1))
+par(mfrow = c(1, 2))
+plot(fit_pp$tau, type = "l", col = "#2c7fb8", main = "tau의 체인", xlab = "반복", ylab = "tau")
+hist(fit_pp$tau, breaks = 40, col = "grey85", border = "white",
+     main = "tau의 사후분포", xlab = "tau", ylab = "빈도")
+abline(v = tau_true, col = "#c0392b", lwd = 2); legend("topright", "참값(6)", col = "#c0392b", lwd = 2, bty = "n")
+```
+
+### (3) 중심화 vs 비중심화
+
+깔때기를 보려면 $\tau$가 실제로 작은 상황이 필요합니다. 배치 간 차이가 거의 없는 두 번째 **가상의 데이터**를 만들고, 두 모수화에 같은 확률보행 메트로폴리스(random-walk Metropolis)를 돌립니다. 알고리즘과 반복수는 같게 두되 **제안 폭은 각 모수화에 맞게 조정했습니다**. 중심화의 $\theta_j$는 자료 스케일이라 2, 비중심화의 $\eta_j$는 표준정규 스케일이라 0.7입니다.
+
+```{r}
+set.seed(19)
+sigma_s <- rep(10, n_batch); a_hn <- 5        # tau ~ Half-Normal(0, 5)
+y_s <- round(rnorm(n_batch, 5, sigma_s), 1)   # 배치 간 차이가 없는(tau=0) 가상 데이터
+# 중심화: 모수는 (mu, log tau, theta_1..theta_J). 마지막 log_tau 항은 야코비안.
+lp_centered <- function(p, y, sigma) {
+  mu <- p[1]; log_tau <- p[2]; tau <- exp(log_tau); theta <- p[-(1:2)]
+  sum(dnorm(y, theta, sigma, log = TRUE)) + sum(dnorm(theta, mu, tau, log = TRUE)) + dnorm(tau, 0, a_hn, log = TRUE) + log_tau
+}
+# 비중심화: 모수는 (mu, log tau, eta_1..eta_J), theta = mu + tau * eta
+lp_noncentered <- function(p, y, sigma) {
+  mu <- p[1]; log_tau <- p[2]; tau <- exp(log_tau); eta <- p[-(1:2)]
+  sum(dnorm(y, mu + tau * eta, sigma, log = TRUE)) + sum(dnorm(eta, 0, 1, log = TRUE)) + dnorm(tau, 0, a_hn, log = TRUE) + log_tau
+}
+rw_metropolis <- function(lp, init, step, n_iter, y, sigma, seed = 1) {
+  set.seed(seed); d <- length(init); draws <- matrix(0, n_iter, d)
+  cur <- init; lp_cur <- lp(cur, y, sigma); n_acc <- 0
+  for (it in 1:n_iter) {
+    prop <- cur + rnorm(d, 0, step)                      # 대칭 제안분포
+    lp_prop <- lp(prop, y, sigma)
+    if (log(runif(1)) < lp_prop - lp_cur) { cur <- prop; lp_cur <- lp_prop; n_acc <- n_acc + 1 }
+    draws[it, ] <- cur
+  }
+  list(draws = draws, acc = n_acc / n_iter)
+}
+var_plus_hat <- function(sims) {               # 아래 두 함수는 W6에서 만든 것과 같습니다
+  sims <- as.matrix(sims); n <- nrow(sims); m <- ncol(sims)
+  ((n - 1) / n) * mean(apply(sims, 2, var)) + if (m > 1) var(colMeans(sims)) else 0
+}
+ess_basic <- function(sims) {
+  sims <- as.matrix(sims); n0 <- nrow(sims); h <- floor(n0 / 2)
+  sp <- cbind(sims[1:h, , drop = FALSE], sims[(n0 - h + 1):n0, , drop = FALSE])  # split
+  n <- nrow(sp); m <- ncol(sp); w <- mean(apply(sp, 2, var)); var_plus <- var_plus_hat(sp)
+  if (!is.finite(var_plus) || var_plus <= 0) return(NA_real_)
+  acov <- sapply(seq_len(m), function(j)      # 체인별 자기공분산을 시차 n-1 까지
+    acf(sp[, j], lag.max = n - 1, type = "covariance", plot = FALSE)$acf[, 1, 1])
+  rho <- 1 - (w - rowMeans(as.matrix(acov))) / var_plus   # rho[k] 는 시차 k-1 의 자기상관
+  n_pair <- floor(length(rho) / 2)                        # 시차 0부터 둘씩: (r0+r1), (r2+r3), ...
+  pair <- cummin(rho[2 * (1:n_pair) - 1] + rho[2 * (1:n_pair)])   # 초기 단조 수열
+  keep <- which(pair < 0)[1] - 1; if (is.na(keep)) keep <- n_pair  # 첫 음수 직전까지
+  tau <- -1 + 2 * (if (keep >= 1) sum(pair[1:keep]) else 0)
+  m * n / max(tau, 1 / log10(m * n))          # mn / tau. 상한 없음(반상관이면 ESS > mn)
+}
+fit_c <- rw_metropolis(lp_centered, c(mean(y_s), log(2), rep(mean(y_s), n_batch)),
+                       c(1.5, 0.5, rep(2, n_batch)), 5000, y_s, sigma_s, seed = 11)
+fit_n <- rw_metropolis(lp_noncentered, c(mean(y_s), log(2), rep(0, n_batch)),
+                       c(1.5, 0.5, rep(0.7, n_batch)), 5000, y_s, sigma_s, seed = 11)
+log_tau_c <- fit_c$draws[, 2]; log_tau_n <- fit_n$draws[, 2]
+cmp <- data.frame(c("중심화", "비중심화"), round(c(fit_c$acc, fit_n$acc), 3), round(c(ess_basic(log_tau_c),
+       ess_basic(log_tau_n))), round(c(min(exp(log_tau_c)), min(exp(log_tau_n))), 4))
+names(cmp) <- c("모수화", "채택률", "ESS_logtau", "도달한 최소 tau"); print(cmp)
+par(mfrow = c(2, 1)); yr <- range(c(log_tau_c, log_tau_n))
+plot(log_tau_c, type = "l", col = "#c0392b", ylim = yr,
+     main = "중심화 모수화: log(tau) 체인", xlab = "반복", ylab = "log(tau)")
+plot(log_tau_n, type = "l", col = "#1a6e3c", ylim = yr,
+     main = "비중심화 모수화: log(tau) 체인", xlab = "반복", ylab = "log(tau)")
+```
+
+중심화 체인은 아래쪽(작은 $\tau$)으로 내려가려다 되튕겨 나와 좁은 띠 안에 오래 머뭅니다. 비중심화 체인은 같은 표집기·같은 반복수로(제안 폭만 각 모수화에 맞게 조정) 깔때기 목까지 내려갔다 올라옵니다. 도달한 최소 $\tau$가 0.61 대 0.0058로 백 배 넘게 차이 나고, $\log\tau$의 ESS도 20 대 89로 네 배 넘게 벌어집니다(`ess_basic`은 [W6](06_hmc_diagnostics.qmd)에서 만든 함수와 같은 것입니다). $\tau$의 사후분포가 0에 붙어 있는 문제에서는 이 차이가 결론을 바꿉니다.
+
+### (4) 사후예측검사(PPC)
+
+사후 표본에서 $\theta$를 뽑아 $y^{\text{rep}}_j \sim \mathcal{N}(\theta_j, \sigma_j^2)$로 가짜 데이터셋을 만듭니다. 이를 수백 번 반복해 검정통계량의 사후예측분포를 얻고, 실제 데이터의 값이 그 안에 들어가는지 봅니다.
+
+```{r}
+set.seed(1)
+n_rep <- 1000
+idx <- sample(nrow(fit_pp$theta), n_rep, replace = TRUE)   # 사후 표본에서 theta 추출
+sigma_mat <- matrix(sigma_j, n_rep, n_batch, byrow = TRUE)  # 가짜 데이터셋 1000개
+y_rep <- matrix(rnorm(n_rep * n_batch, fit_pp$theta[idx, , drop = FALSE], sigma_mat), n_rep, n_batch)
+t_max_rep <- apply(y_rep, 1, max); t_sd_rep <- apply(y_rep, 1, sd)
+p_max <- mean(t_max_rep >= max(y_j)); p_sd <- mean(t_sd_rep >= sd(y_j)); par(mfrow = c(1, 2))
+hist(t_max_rep, breaks = 40, col = "grey85", border = "white",
+     main = sprintf("T = max(y), p = %.2f", p_max), xlab = "T(y_rep)", ylab = "빈도")
+abline(v = max(y_j), col = "#c0392b", lwd = 2)
+hist(t_sd_rep, breaks = 40, col = "grey85", border = "white",
+     main = sprintf("T = sd(y), p = %.2f", p_sd), xlab = "T(y_rep)", ylab = "빈도")
+abline(v = sd(y_j), col = "#c0392b", lwd = 2)
+```
+
+베이지안 p-value는 $\Pr\!\left(T(y^{\text{rep}}) \ge T(y)\right)$입니다. 0.5 근처면 모형이 그 통계량을 잘 재현한다는 뜻이고, 0이나 1에 붙으면 모형이 그 측면을 설명하지 못한다는 뜻입니다. 여기서는 두 통계량 모두 사후예측분포 한가운데에 있습니다.
+
+::: {.callout-warning}
+베이지안 p-value는 빈도주의 p-value가 아닙니다. 데이터를 모형 적합과 검사에 두 번 쓰기 때문에 균등분포를 따르지 않고 0.5 쪽으로 몰립니다. 곧 **보수적**입니다. 0.05 같은 컷오프로 기각을 선언하지 말고 모형이 놓치는 데이터 특성을 찾는 진단으로 쓰십시오. 검정통계량 $T$를 무엇으로 잡느냐가 결론을 좌우하므로, 실제로 중요하게 보는 요약값(최댓값, 0의 비율, 분산, 잔차 패턴)을 여러 개 써야 합니다.
+:::
+
+### (5) WAIC 직접 계산
+
+```{r}
+waic_calc <- function(log_lik) {                 # log_lik: S(사후표본) x n(관측) 행렬
+  lppd_i <- apply(log_lik, 2,                    # 관측별 로그 사후예측밀도 (log-sum-exp)
+                  function(v) { m <- max(v); m + log(mean(exp(v - m))) })
+  p_i <- apply(log_lik, 2, var); elpd_i <- lppd_i - p_i   # 관측별 로그가능도의 사후 분산
+  list(lppd = sum(lppd_i), p_waic = sum(p_i), elpd_i = elpd_i, waic = -2 * sum(elpd_i),
+       se = 2 * sqrt(length(elpd_i)) * sd(elpd_i))
+}
+n_draw <- nrow(fit_pp$theta); y_mat <- matrix(y_j, n_draw, n_batch, byrow = TRUE)
+sig_full <- matrix(sigma_j, n_draw, n_batch, byrow = TRUE)
+ll_partial <- dnorm(y_mat, fit_pp$theta, sig_full, log = TRUE)     # 부분 통합
+set.seed(3)   # 무통합 사후 theta_j | y ~ N(y_j, sigma_j^2)
+theta_nopool <- matrix(rnorm(n_draw * n_batch, y_mat, sig_full), n_draw, n_batch)
+ll_nopool <- dnorm(y_mat, theta_nopool, sig_full, log = TRUE)
+w_pp <- waic_calc(ll_partial); w_np <- waic_calc(ll_nopool)
+res_w <- data.frame(c("부분통합", "무통합"), round(c(w_pp$lppd, w_np$lppd), 2),
+                    round(c(w_pp$p_waic, w_np$p_waic), 2), round(c(w_pp$waic, w_np$waic), 2), round(c(w_pp$se, w_np$se), 2))
+names(res_w) <- c("모형", "lppd", "p_waic", "WAIC", "se"); print(res_w)
+d_i <- w_pp$elpd_i - w_np$elpd_i                 # 짝지은 차이로 표준오차를 구함
+cat(sprintf("WAIC 차이(부분통합 - 무통합) = %.2f, se = %.2f\n", -2 * sum(d_i), 2 * sqrt(n_batch) * sd(d_i)))
+cat("p_waic_i > 0.4 인 관측 수:  부분통합", sum(apply(ll_partial, 2, var) > 0.4),
+    "/ 무통합", sum(apply(ll_nopool, 2, var) > 0.4), "\n")
+```
+
+부분 통합은 `lppd`(적합)가 무통합보다 오히려 낮습니다. 추정치를 평균 쪽으로 당겼으니 관측값을 덜 정확히 맞추는 것이 당연합니다. 그런데도 WAIC가 더 작은 이유는 벌점항 `p_waic`가 확실히 작기 때문입니다(3.09 대 4.03). 무통합의 $p_{\text{WAIC}}$가 4로 나오는 것은 모수가 8개여서가 아닙니다. 사후가 $\theta_j \mid y \sim \mathcal{N}(y_j, \sigma_j^2)$ 이므로 $\log p(y_j\mid\theta_j)$ 는 $-\tfrac12 z^2$ 꼴이고 $z\sim\mathcal{N}(0,1)$ 이라, 관측 하나가 $\mathrm{Var}[z^2/2]=0.5$ 씩 기여해 합이 $8\times0.5=4$ 가 됩니다. $p_{\text{waic}}$ 는 모수 개수가 아니라 **로그가능도의 사후 변동성**입니다. 부분 통합은 $\tau$가 $\theta_j$들을 묶어 이 변동성이 줄어듭니다. 다만 차이가 그 표준오차보다 작으므로 이 데이터만으로 두 모형을 확실히 구분할 수는 없다고 보고하는 것이 정직합니다. 그리고 이 데이터는 그룹당 관측이 하나뿐이라 "관측 하나 제외"가 곧 "배치 하나 통째로 제외"입니다. 기존 배치 안의 새 표본을 예측하려는 것이라면 교차검증 단위를 그에 맞게 바꿔야 합니다.
+
+::: {.callout-warning}
+`p_waic`는 합만 보지 말고 관측별 기여도 $p_{\text{waic},i}$ 로 쪼개 봐야 합니다. $p_{\text{waic},i} > 0.4$ 인 관측이 있으면 WAIC의 근사가 불안정해 값을 그대로 믿기 어렵습니다(Vehtari et al. 2017). 위 출력에서 무통합 모형은 관측 8개가 **전부** 0.4를 넘고(각각 약 0.5), 부분 통합도 Batch7 하나가 넘습니다. 곧 위 WAIC 비교는 근사가 깨진 영역의 계산이며, 이럴 때는 아래에서 설명할 PSIS-LOO로 바꾸고 관측별 Pareto $k$ 를 함께 확인해야 합니다. 여기서 WAIC를 계산해 본 것은 공식이 어떻게 작동하는지 보기 위해서입니다.
+:::
+
+::: {.callout-note collapse="true"}
+## 수식으로 보기: 편차에서 WAIC, LOO까지
+
+$$
+\widehat{\text{lppd}} = \sum_{i=1}^{n} \log\!\left(\frac{1}{S}\sum_{s=1}^{S} p(y_i \mid \theta^{(s)})\right), \qquad \hat{p}_{\text{WAIC}} = \sum_{i=1}^{n} \mathrm{Var}_{s}\!\left[\log p(y_i \mid \theta^{(s)})\right]
+$$
+$$
+\text{WAIC} = -2\left(\widehat{\text{lppd}} - \hat{p}_{\text{WAIC}}\right), \qquad \widehat{\text{elpd}}_{\text{LOO}} = \sum_{i=1}^{n} \log p(y_i \mid y_{-i})
+$$
+$S$는 사후 표본 수, $n$은 관측 수입니다. LOO는 $n$번 다시 적합하는 대신 중요도 가중치 $w_i^{(s)} \propto 1/p(y_i\mid\theta^{(s)})$로 근사하고, 그 가중치의 꼬리를 일반화 파레토 분포로 안정화한 것이 PSIS-LOO입니다.
+:::
+
+## 모형 비교 도구를 언제 무엇으로
+
+**베이즈 인자(Bayes factor)**는 두 모형의 주변가능도 비 $\text{BF}_{12} = p(y\mid M_1)/p(y\mid M_2)$입니다. 사후 오즈 = 베이즈 인자 × 사전 오즈라는 깔끔한 해석이 있지만 실무에서는 사전분포에 극도로 민감합니다.
+
+::: {.callout-warning}
+**Lindley/Jeffreys 역설.** 대립모형에서 모수 $\theta$에 폭 $A$의 넓은 사전분포를 주면 주변가능도 $p(y\mid M_1)=\int p(y\mid\theta)p(\theta)\,d\theta$는 대략 $1/A$에 비례해 줄어듭니다. 사전분포를 넓힐수록 베이즈 인자는 귀무모형 쪽으로 끌려가고, $A \to \infty$면 데이터가 무엇이든 귀무모형이 이깁니다. 같은 데이터가 p-value로는 0.01인데 베이즈 인자로는 귀무모형 지지로 나올 수 있습니다. 사후분포는 사전분포가 충분히 평평하면 거의 안 변하지만 베이즈 인자는 끝까지 변합니다. 그래서 무정보 사전분포로 베이즈 인자를 계산하는 것은 의미가 없습니다. 사전분포를 실질적 근거로 정당화하고 척도를 바꿔 가며 민감도를 보고해야 합니다.
+:::
+
+**정보기준**은 다른 질문에 답합니다. 베이즈 인자가 "어느 모형이 데이터를 만들었을 확률이 높은가"라면, WAIC/LOO는 "어느 모형이 **새 데이터를 더 잘 예측**하는가"입니다. AIC 계열의 출발점인 편차(deviance) $-2\log p(y\mid\hat\theta)$는 점추정 하나만 쓰지만, WAIC는 사후분포 전체를 쓰고 벌점도 사후 분산에서 직접 계산합니다. LOO-CV는 정의상 더 곧바르고 PSIS-LOO는 그것을 한 번의 적합으로 근사합니다. `loo` 패키지의 **Pareto $k$**는 관측별 진단값으로, $k < 0.7$이면 그 관측의 중요도 가중 근사가 믿을 만하고 $k > 0.7$이면 그 관측을 빼는 것이 사후분포를 너무 크게 바꿔 근사가 불안정하다는 뜻입니다. $k$가 큰 관측이 몇 개뿐이면 그 관측만 실제로 다시 적합(`reloo`)하고, 많으면 모형이 그 데이터에 과하게 끌려다닌다는 신호입니다. 앞에서 본 $p_{\text{waic},i} > 0.4$ 경고가 가리키는 것도 같은 문제이며, 위 WAIC 비교가 바로 그 경우여서 실제 보고라면 PSIS-LOO 결과를 대신 실어야 합니다.
+
+::: {.callout-tip}
+**실무 권고 순서.** (1) 먼저 PPC로 모형이 데이터의 중요한 특성을 재현하는지 봅니다. 재현하지 못하면 비교할 가치가 없습니다. (2) 목적이 예측이면 LOO(가능하면 PSIS-LOO), 차선으로 WAIC입니다. (3) 목적이 가설 사이의 증거 무게 비교이고 사전분포를 실질적으로 정당화할 수 있을 때만 베이즈 인자를 씁니다. WAIC/LOO의 차이는 표준오차와 함께 보고하고, 차이가 표준오차의 2배 미만이면 구분이 안 된다고 말하는 것이 맞습니다.
+:::
+
+## 실습: 패키지로 풀기
+
+CI 환경에 아래 패키지가 없어 실행하지 않습니다. 실제 분석에서 쓰는 형태만 보여 둡니다.
+
+```{r}
+#| eval: false
+library(brms); library(loo)
+dat <- data.frame(y = y_j, se = sigma_j, batch = factor(batch_id))
+fit_brm <- brm(                                  # 비중심화는 brms/Stan 이 자동 처리
+  y | se(se) ~ 1 + (1 | batch), data = dat,
+  prior = c(prior(normal(0, 50), class = Intercept),
+            prior(cauchy(0, 25), class = sd)),
+  chains = 4, iter = 4000, seed = 1,
+  control = list(adapt_delta = 0.95)             # 발산 전이가 나면 더 올림
+)
+pp_check(fit_brm, type = "stat", stat = "max")   # 사후예측검사
+loo_brm <- loo(fit_brm); print(loo_brm)          # PSIS-LOO: elpd_loo, p_loo, looic, Pareto k 표
+plot(loo_brm)                                    # 관측별 k 값
+loo_compare(loo(fit_brm), loo(fit_brm_nopool))   # 차이와 표준오차를 함께
+```
+
+## 연습문제
+
+### 문제 1. 축소량은 무엇에 의존하는가
+
+축소 계수 $B_j$를 $\sigma_j$와 $\tau$의 함수로 쓰고, $\tau$를 0부터 30까지 바꿔 가며 서로 다른 $\sigma_j$에 대해 $B_j$가 어떻게 변하는지 한 그림에 그리십시오.
+
+::: {.callout-note collapse="true"}
+## 풀이
+
+$B_j = \sigma_j^2/(\sigma_j^2+\tau^2)$입니다. $\tau=0$에서 1(완전 통합), $\tau\to\infty$에서 0(무통합)이고, $\tau=\sigma_j$일 때 정확히 0.5입니다. 그룹 간 이질성이 그 그룹의 측정 오차와 같은 크기면 절반쯤 당겨진다는 뜻입니다.
+
+```{r}
+tau_grid <- seq(0.01, 30, length.out = 300)
+sig_set <- c(5, 10, 18); col_set <- c("#1a6e3c", "#2c7fb8", "#c0392b")
+b_mat <- sapply(sig_set, function(s) s^2 / (s^2 + tau_grid^2))
+matplot(tau_grid, b_mat, type = "l", lwd = 2, lty = 1, col = col_set,
+        main = "축소 계수 B_j = sigma^2/(sigma^2 + tau^2)", xlab = "tau (그룹 간 표준편차)", ylab = "축소 계수 B_j")
+abline(h = 0.5, col = "grey60", lty = 2)
+points(sig_set, rep(0.5, length(sig_set)), pch = 16, col = col_set)  # tau = sigma 지점
+legend("topright", legend = paste("sigma =", sig_set), bty = "n", col = col_set, lwd = 2)
+```
+
+점은 $\tau=\sigma_j$인 지점입니다. 표준오차가 큰 그룹(빨강)일수록 같은 $\tau$에서 더 위쪽, 곧 더 많이 축소됩니다.
+:::
+
+### 문제 2. 주어진 로그가능도 행렬에서 WAIC 계산
+
+아래 코드로 만든 $S \times n$ 로그가능도 행렬에서 lppd, `p_waic`, WAIC를 구하고 `waic_calc`의 결과와 일치하는지 확인하십시오.
+
+```{r}
+set.seed(2024); mu_draw <- rnorm(2000, 1.2, 0.4)   # 어떤 모형의 사후 표본 S = 2000
+y_obs <- c(0.7, 1.5, 2.9, 0.2, 1.1, 1.8)    # 가상의 관측값 n = 6
+ll_mat <- sapply(y_obs, function(y) dnorm(y, mu_draw, 1, log = TRUE))
+dim(ll_mat)
+```
+
+::: {.callout-note collapse="true"}
+## 풀이
+
+```{r}
+lppd_i <- apply(ll_mat, 2, function(v) { m <- max(v); m + log(mean(exp(v - m))) }); p_i <- apply(ll_mat, 2, var)
+manual <- c(sum(lppd_i), sum(p_i), -2 * (sum(lppd_i) - sum(p_i))); res <- waic_calc(ll_mat)
+chk <- data.frame(c("lppd", "p_waic", "WAIC"), round(manual, 4), round(c(res$lppd, res$p_waic, res$waic), 4))
+names(chk) <- c("항목", "직접 계산", "waic_calc"); print(chk)
+round(data.frame(y = y_obs, lppd_i = lppd_i, p_i = p_i), 3)
+```
+
+관측별 기여도를 보면 어느 관측이 WAIC를 끌어올리는지 알 수 있습니다. 사후 평균 1.2에서 가장 멀리 떨어진 $y=2.9$가 `lppd_i`도 가장 낮고 `p_i`도 가장 큽니다. 사후분포에 따라 가능도가 크게 흔들린다는 뜻이고, PSIS-LOO를 썼다면 Pareto $k$도 같이 커질 후보입니다.
+:::
+
+### 문제 3. tau의 사전분포 민감도
+
+`gibbs_hier`의 `a_scale`(반코시 척도)을 1, 5, 25, 100으로 바꿔 가며 $\tau$의 사후중앙값과 Batch7의 사후평균이 얼마나 달라지는지 확인하십시오.
+
+::: {.callout-note collapse="true"}
+## 풀이
+
+```{r}
+a_set <- c(1, 5, 25, 100)
+sens <- t(sapply(a_set, function(a) { f <- gibbs_hier(y_j, sigma_j, n_iter = 4000, a_scale = a, seed = 7)
+  c(tau_med = median(f$tau), theta7 = mean(f$theta[, 7]), mu = mean(f$mu)) }))
+print(data.frame(a_scale = a_set, round(sens, 2)))
+par(mfrow = c(1, 2))
+plot(a_set, sens[, "tau_med"], type = "b", pch = 16, log = "x", col = "#1a6e3c",
+     main = "사전 척도에 따른 tau", xlab = "half-Cauchy 척도 A (로그 축)", ylab = "tau 사후중앙값")
+plot(a_set, sens[, "theta7"], type = "b", pch = 16, log = "x", col = "#c0392b",
+     ylim = range(c(sens[, "theta7"], mu_pool, y_j[7])), ylab = "theta_7 사후평균",
+     main = "Batch7 추정치의 이동", xlab = "half-Cauchy 척도 A (로그 축)")
+abline(h = y_j[7], col = "grey60", lty = 2)
+abline(h = mu_pool, col = "#2c7fb8", lty = 3, lwd = 2)
+legend("bottomright", legend = c("무통합 y_7", "완전통합 mu"),
+       col = c("grey60", "#2c7fb8"), lty = c(2, 3), lwd = c(1, 2), bty = "n", cex = 0.8)
+```
+
+$A$가 작으면 $\tau$가 눌려 추정치가 완전 통합 쪽에 붙고, $A$가 커지면 $\tau$가 풀리며 무통합 쪽으로 갑니다. 그룹이 8개뿐이라 데이터가 $\tau$를 강하게 특정하지 못하므로 사전분포의 흔적이 끝까지 남습니다. 다만 $A$를 25에서 100으로 네 배 늘렸을 때의 변화가 1에서 5로 늘렸을 때보다 훨씬 작다는 점은, 그 범위에서는 사전분포가 이미 충분히 넓어 데이터가 주도한다는 신호입니다. 이런 표를 논문에 함께 보고해야 합니다.
+:::
+
+## 정리
+
+- 그룹이 많고 그룹별 표본이 작으면 완전 통합은 편향되고 무통합은 과장됩니다. 부분 통합은 $\tau$를 데이터로 추정해 그 사이 위치를 자동으로 정합니다.
+- 축소 계수 $B_j = \sigma_j^2/(\sigma_j^2+\tau^2)$가 모든 것을 요약합니다. 자료가 부실한 그룹일수록, 그룹 간 이질성이 작을수록 전체 평균 쪽으로 더 당겨집니다. `limma`·`DESeq2`의 분산 축소가 같은 계열의 경험적 베이즈입니다.
+- $\tau$에는 반코시나 반정규를 주고, $\tau$가 0 근처면 깔때기가 생기므로 $\theta_j = \mu + \tau\eta_j$ 비중심화로 바꿉니다. 같은 표집기·같은 반복수에서(제안 폭만 모수화에 맞게 조정) 유효표본크기가 네 배 넘게, 도달한 최소 $\tau$가 백 배 넘게 차이 납니다.
+- PPC는 모형이 데이터의 중요한 특성을 재현하는지 보는 진단입니다. 베이지안 p-value는 보수적이고 검정통계량 선택에 의존하므로 컷오프로 쓰지 않습니다. 예측이 목적이면 LOO/WAIC를, 가설 비교가 목적이면 사전분포를 정당화한 베이즈 인자를 씁니다. 베이즈 인자는 사전분포 폭에 끝까지 민감합니다(Lindley/Jeffreys 역설).
+- WAIC $=-2(\text{lppd}-p_{\text{WAIC}})$는 로그가능도 행렬만 있으면 몇 줄로 계산됩니다. 차이는 반드시 표준오차와 함께 보고하고, $p_{\text{waic},i}>0.4$ 인 관측이 있으면 WAIC 대신 PSIS-LOO를 쓰며 그때는 Pareto $k > 0.7$인 관측을 확인합니다.
+
+## 다음 시간
+
+여기까지가 Part 1, 베이지안 추론의 공통 뼈대입니다. 다음 주부터는 Part 2 생명정보학 응용으로 넘어갑니다. 먼저 이번 주의 축소 아이디어를 회귀로 확장해 축소 사전분포(shrinkage prior, ridge·lasso·horseshoe)를 쓰는 베이지안 회귀를 다룹니다. 이어서 GWAS 연관 신호에서 인과 변이의 사후확률을 구하는 fine-mapping, 두 형질이 같은 인과 변이를 공유하는지 보는 colocalization, 염색질 상태를 숨은 상태로 두는 HMM chromatin state 분절, read depth에서 복제수 변이를 부르는 CNV calling으로 이어집니다. 모두 이번 주까지 쌓은 사전분포·사후분포·MCMC·모형 비교를 그대로 씁니다.
+

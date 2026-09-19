@@ -1,11 +1,10 @@
 project:
   type: website
   execute-dir: project
-  # output-dir: _site
 
 website:
-  title: "2. Linear Algebra"          # ← 변경
-  description: "강의 설명"           # ← 변경
+  title: "베이지안 통계"
+  description: "생명정보학을 위한 베이지안 통계 — 이론과 R 실습"
   favicon: images/logo.ico
   navbar:
     left:
@@ -13,7 +12,7 @@ website:
         text: Home
     right:
       - icon: github
-        href: https://github.com/kkonoo/2_linear_algebra  # ← 변경
+        href: https://github.com/kkonoo/4_Bayes
 
   sidebar:
     style: "floating"
@@ -21,24 +20,26 @@ website:
     contents:
       - text: "Home"
         href: index.qmd
-      - section: "Part 1. 기초"
+      - section: "Part 1. 베이지안 통계의 기초"
         contents:
-          - chapters/01_intro.qmd
-          - chapters/02_r_basics.qmd
-      # - section: "1. R env"
-      #   contents: "part1/*.qmd"
-      # - section: "2. Genomics"
-      #   contents: "part2/*.qmd"
-      # - section: "3. Omics"
-      #   contents: "part3/*.qmd"
-      # - section: "4. Multi-Omics"
-      #   contents: "part4/*.qmd"
-      # - section: "5. Capstone"
-      #   contents: "part5/*.qmd"
+          - chapters/01_probability_bayes.qmd
+          - chapters/02_conjugate.qmd
+          - chapters/03_prior_posterior.qmd
+          - chapters/04_approximation.qmd
+          - chapters/05_mcmc_basics.qmd
+          - chapters/06_hmc_diagnostics.qmd
+          - chapters/07_hierarchical_modelcomp.qmd
+      # - section: "Part 2. 생명정보학 응용"
+      #   contents:
+      #     - chapters/08_finemapping.qmd
+      #     - chapters/09_colocalization.qmd
+      #     - chapters/10_hmm_chromatin.qmd
+      #     - chapters/11_cnv_calling.qmd
+      #     - chapters/12_deconvolution.qmd
+      #     - chapters/13_capstone.qmd
 
   page-footer:
     left: "Copyright 2026, Eunji"
-
 
 format:
   html:
@@ -51,29 +52,31 @@ format:
     toc-float: true
     page-layout: full
 
-    code-fold: false  
+    code-fold: false
     code-copy: true
-    highlight-style: github 
+    highlight-style: github
 
     number-sections: false
     smooth-scroll: true
-
-    # grid:                       
-    #   sidebar-width: 400px
-    #   body-width: 1000px
-    #   margin-width: 300px # toc
 
     # AI 채팅 위젯 전역 설정
     include-after-body: assets/ai-chat-init.html
 
   revealjs:
-    css: assets/revealjs.css    # 슬라이드용
-
+    css: assets/revealjs.css
 
 execute:
   freeze: auto          # 코드 실행 결과 캐시 (빠른 빌드)
   echo: true
-  eval: false
+  eval: true            # base R 코드는 실제 실행해 결과를 보여줍니다
   warning: false
   message: false
 
+knitr:
+  opts_chunk:
+    dev: "png"
+    dev.args:
+      type: "cairo"
+    fig.width: 8
+    fig.height: 4.5
+    dpi: 150

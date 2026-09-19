@@ -1,0 +1,398 @@
+---
+title: "W4. 사후분포의 수치적 근사"
+description: "켤레가 아닌 사후분포를 격자·라플라스·기각표집·중요도표집으로 근사하고, 각 방법이 언제 무너지는지 확인합니다."
+author: "Eunji Ha"
+date: today
+
+format:
+  html:
+    include-in-header:
+      text: |
+        <meta name="ai-title" content="W4. 사후분포의 수치적 근사">
+        <meta name="ai-context" content="
+        이 챕터는 켤레(conjugate) 관계가 없어 정규화상수 m(y) = INT p(y|theta) p(theta) dtheta 를 해석적으로 풀 수 없을 때
+        쓰는 네 가지 수치적 근사법을 다룹니다. 공통 예제는 비켤레 모형으로, 대립유전자 read 수 y ~ Binomial(n, theta) 에
+        로짓(logit) 스케일 모수 beta = log(theta/(1-theta)) 를 두고 beta ~ Normal(0, 1.5^2) 사전을 줍니다. 비정규화 로그사후는
+        log q(beta) = y*beta - n*log(1+exp(beta)) + dnorm(beta, 0, 1.5, log=TRUE) 이고, 오버플로를 막으려고
+        log1pexp(x) = x (x가 클 때) 또는 log1p(exp(x)) 를 씁니다.
+
+        격자 근사(grid approximation)는 모수 공간을 균등 격자로 쪼개 각 점에서 비정규화 사후를 계산하고 합으로 나눠
+        정규화합니다. 1~2차원에서는 사실상 정답이지만 격자점 수가 G^d 로 늘어나는 차원의 저주(curse of dimensionality)를
+        겪습니다. 라플라스 근사(Laplace approximation)는 로그사후를 최빈값(MAP) 주변에서 2차 테일러 전개해
+        Normal(beta_map, H^-1) 로 근사하며 optim(..., hessian=TRUE) 로 헤시안 H를 얻습니다. 기각표집(rejection sampling)은
+        제안분포 g와 상수 M에 대해 q <= M g 를 만족시키고 수용확률 q/(M g) 로 채택하며, 전체 수용률은 m(y)/M 이고 차원이
+        오르면 급락합니다. 중요도표집(importance sampling)은 가중치 w = q/g 로 자기정규화(self-normalized) 추정량을 만들고
+        유효표본수 ESS = (sum w)^2 / sum(w^2) 로 품질을 잽니다. 제안분포 꼬리가 사후보다 얇으면 가중치가 발산합니다.
+
+        실습 함수는 optim, dnorm, dt, rnorm, rt, rbinom, runif, plogis, qlogis, cumsum 이고 base R만 씁니다. set.seed(42)로
+        시드를 고정하며, 네 방법이 모두 고차원에서 한계를 보이므로 W5의 MCMC로 넘어간다는 흐름으로 마무리합니다.
+        ">
+---
+
+## 학습 목표
+
+- 켤레가 아닌 모형에서 정규화상수를 왜 해석적으로 구할 수 없는지 설명할 수 있다.
+- 격자 근사를 구현하고, 차원의 저주가 왜 치명적인지 구체적 수치로 설명할 수 있다.
+- `optim(..., hessian = TRUE)`으로 라플라스 근사를 구현하고 그 가정이 깨지는 상황을 진단할 수 있다.
+- 기각표집과 중요도표집을 구현하고 수용률·유효표본수(ESS)로 품질을 평가할 수 있다.
+- 네 방법의 한계를 비교해 MCMC가 필요한 이유를 설명할 수 있다.
+
+RNA-seq 정렬 결과에서 어떤 이형접합 부위의 read를 세어 보니 40개 중 일부가 대립유전자(alternative allele)를 담고 있었습니다. 대립유전자 특이적 발현(allele-specific expression)이 있는지 보려면 대립유전자 비율 $\theta$의 사후분포가 필요합니다. [W2](02_conjugate.qmd)처럼 베타 사전을 쓰면 답이 닫힌 형태로 나옵니다. 그런데 이 랩에서는 여러 부위를 하나의 회귀로 묶을 계획이라, 처음부터 로짓(logit) 스케일 모수 $\beta = \log\{\theta/(1-\theta)\}$에 정규 사전을 주기로 했습니다. 로지스틱 회귀 계수와 같은 스케일이라 나중에 공변량을 붙이기 쉽기 때문입니다. 이 순간 켤레성이 사라집니다. 이항 가능도와 로짓 스케일 정규 사전의 곱은 우리가 이름을 아는 어떤 분포도 아닙니다. 사후분포의 모양은 계산할 수 있지만, 그것을 확률분포로 만들어 주는 상수를 손으로 구할 수 없습니다. 이번 주는 그 상수를 우회하는 네 가지 방법을 배웁니다.
+
+## 문제: 정규화상수를 못 푼다
+
+베이즈 정리는 사후가 가능도와 사전의 곱에 비례한다고 말합니다. 비례상수는 그 곱을 모수 공간 전체에서 적분한 값입니다. 켤레 모형에서는 이 적분이 이미 알려진 분포의 정규화상수와 같아 공짜로 얻어지지만, 켤레가 아니면 그렇지 않습니다. 다만 **비정규화 사후(unnormalized posterior)는 언제나 계산할 수 있습니다.** 가능도와 사전을 곱하면 되니까요. 못 하는 것은 그 값을 전체 적분값으로 나누는 일뿐이고, 이번 주의 네 방법은 모두 "비정규화 값만 쓰고 적분은 피한다"는 같은 전략에서 출발합니다.
+
+::: {.callout-note collapse="true"}
+## 수식으로 보기
+
+$$p(\theta \mid y) = \frac{p(y \mid \theta)\,p(\theta)}{m(y)}, \qquad m(y) = \int p(y \mid \theta)\,p(\theta)\,d\theta$$
+
+$m(y)$는 주변가능도(marginal likelihood)입니다. 앞으로 $q(\theta) = p(y\mid\theta)p(\theta)$를 비정규화 사후라 부르고 $p(\theta\mid y) = q(\theta)/m(y)$로 씁니다. 이 챕터의 공통 모형은 $y \sim \text{Binomial}(n,\theta)$, $\theta = (1+e^{-\beta})^{-1}$, $\beta \sim N(0,\,1.5^2)$ 이므로 $\log q(\beta) = y\beta - n\log(1+e^{\beta}) - \beta^2/(2\cdot 1.5^2) + \text{const}$ 입니다. $\beta$에 대해 지수족 형태로 정리되지 않아 $\int q(\beta)d\beta$의 닫힌 형태가 없습니다.
+:::
+
+## 격자 근사
+
+적분을 못 하겠으면 잘게 쪼개서 더하면 됩니다. 모수 공간을 촘촘한 격자로 덮고 각 격자점에서 $q$를 계산한 뒤 전체 합으로 나눠 확률처럼 만듭니다. 거친 격자 다섯 개로 시작해 보겠습니다(가상의 데이터, $y=7$, $n=20$).
+
+```{r}
+#| label: grid-toy
+beta_5 <- seq(-3, 1, by = 1)                  # 로짓 스케일의 아주 거친 격자
+# 로그 비정규화 사후 = 이항 가능도(로짓 스케일) + 정규 사전
+lp_5 <- 7 * beta_5 - 20 * log1p(exp(beta_5)) + dnorm(beta_5, 0, 1.5, log = TRUE)
+un_5 <- exp(lp_5 - max(lp_5))                 # 최댓값을 빼고 지수화 (수치 안정성)
+round(rbind(beta = beta_5, unnorm = un_5, post = un_5 / sum(un_5)), 4)
+```
+
+다섯 점만으로도 $\beta$가 $-1$과 $0$ 사이, 대략 $-0.6$ 근처에 몰려 있다는 것이 보입니다. 질량의 거의 전부가 $\beta=-1$(0.585)과 $\beta=0$(0.402) 두 점에 실려 있고, 이 다섯 점으로 계산한 사후평균은 $-0.61$입니다. 점을 수백 개로 늘리면 사실상 정확한 답이 됩니다.
+
+::: {.callout-note collapse="true"}
+## 수식으로 보기
+
+$$\hat{p}(\theta_g \mid y) = \frac{q(\theta_g)}{\sum_{j} q(\theta_j)}, \qquad \mathbb{E}[h(\theta)\mid y] \approx \sum_{g} h(\theta_g)\,\hat{p}(\theta_g \mid y).$$
+
+격자 $\theta_1,\dots,\theta_G$와 간격 $\Delta$에 대한 식입니다. $\Delta$는 분자와 분모에서 상쇄되므로 기댓값에는 나타나지 않습니다. 이 챕터에서 $\hat{p}(\theta_g\mid y)$는 격자점의 **확률질량**이고(합이 1), 밀도 곡선을 그릴 때만 $\hat{p}/\Delta$로 나눕니다. [W1](01_probability_bayes.qmd)에서는 같은 자리를 처음부터 $\Delta$로 나눈 **밀도**로 정의했으니 두 주차의 식을 비교할 때 주의하십시오. 오차는 격자 간격에 대해 $O(\Delta^2)$ 수준입니다.
+:::
+
+### 차원의 저주
+
+각 축을 100등분하면 격자점 수는 $100^d$입니다.
+
+```{r}
+#| label: curse
+n_dim <- c(1, 2, 3, 5, 10)
+n_points <- 100^n_dim                          # 축당 100등분
+est_sec <- n_points * 1e-6                     # 평가 1회당 1마이크로초 가정
+data.frame(d = n_dim, grid_points = signif(n_points, 3),
+           seconds = signif(est_sec, 3), years = signif(est_sec / 3.156e7, 3))
+```
+
+모수 3개면 백만 점, 1초입니다. 5개면 100억 점, 약 3시간입니다. 10개면 300만 년이 걸립니다. 계층모형이나 로지스틱 회귀에서 모수 10개는 전혀 큰 모형이 아닙니다.
+
+::: {.callout-warning}
+격자 근사는 "격자 범위 밖의 확률은 0"이라고 가정합니다. 범위를 좁게 잡으면 꼬리가 잘려 사후 표준편차가 과소추정되므로, 항상 격자 양 끝의 비정규화 사후값이 최댓값 대비 충분히 작은지 확인해야 합니다.
+:::
+
+## 라플라스 근사
+
+표본이 많아지면 사후는 종 모양에 가까워집니다. 그렇다면 전체를 다 계산할 것 없이 봉우리의 위치와 그 주변이 휘어진 정도만 알면 됩니다. 로그사후는 봉우리 근처에서 아래로 볼록한 포물선처럼 보이는데, 로그가 정확히 포물선이면 원래 함수는 정확히 정규분포입니다. 그래서 두 가지만 구하면 됩니다. 로그사후를 최대로 만드는 점(최빈값, MAP)과 그 점에서의 2계 도함수입니다. 2계 도함수의 절댓값이 크면 봉우리가 뾰족하다는 뜻이고 그만큼 분산이 작습니다. 다차원이면 헤시안(Hessian) 행렬의 역행렬이 곧 공분산행렬입니다.
+
+::: {.callout-note collapse="true"}
+## 수식으로 보기
+
+$$\log q(\theta) \approx \log q(\hat\theta) - \tfrac{1}{2}(\theta-\hat\theta)^\top H (\theta-\hat\theta), \qquad H = -\left.\frac{\partial^2 \log q}{\partial\theta\,\partial\theta^\top}\right|_{\hat\theta}$$
+
+$\hat\theta = \arg\max_\theta \log q(\theta)$에서 2차까지 전개하면 1차항이 0이라 위 식이 되고, 지수를 취하면 정규분포의 커널이므로 $p(\theta\mid y) \approx N(\hat\theta,\,H^{-1})$입니다. $H$는 음의 로그사후의 헤시안이므로, 목적함수를 음의 로그사후로 두면 `optim(..., hessian = TRUE)`이 바로 $H$를 돌려줍니다. 덤으로 $m(y) \approx q(\hat\theta)(2\pi)^{d/2}|H|^{-1/2}$라는 정규화상수 근사도 얻는데, 이 식이 BIC의 출발점입니다.
+:::
+
+::: {.callout-tip}
+라플라스 근사의 비용은 최적화 한 번입니다. 격자처럼 $G^d$로 늘어나지 않고 모수 개수에 대해 다항식 수준으로만 늘어나므로 수십 차원에서도 즉시 계산됩니다.
+:::
+
+::: {.callout-warning}
+라플라스 근사는 사후가 하나의 봉우리를 갖고 대략 대칭일 때만 믿을 수 있습니다. 표본이 작거나, 모수가 경계 근처($\theta$가 0이나 1에 붙은 경우)이거나, 사후가 다봉(multimodal)이면 크게 빗나갑니다. 다봉일 때는 봉우리 하나만 잡고 나머지를 완전히 무시합니다.
+:::
+
+## 기각표집
+
+앞의 두 방법은 밀도를 근사했습니다. 이제부터는 사후에서 **표본을 뽑는** 방법입니다. 표본만 있으면 평균이든 구간이든 전부 표본통계량으로 계산할 수 있습니다. 직관은 다트 던지기입니다. 비정규화 사후 $q$를 완전히 덮는 지붕 $Mg$를 씌웁니다. $g$는 쉽게 뽑을 수 있는 제안분포(proposal distribution), $M$은 덮개를 만드는 상수입니다. $g$에서 후보를 뽑고 0과 $Mg$ 사이에서 높이를 균등하게 뽑아, 그 높이가 $q$ 아래면 채택합니다. 채택된 점들은 근사가 아니라 **정확히** 사후분포를 따릅니다. 문제는 효율입니다. 지붕과 실제 함수 사이의 빈 공간이 넓을수록 버려지는 후보가 많아집니다.
+
+::: {.callout-note collapse="true"}
+## 수식으로 보기
+
+$$P(\text{accept}) = \frac{\int q(\theta)\,d\theta}{M} = \frac{m(y)}{M}$$
+
+모든 $\theta$에서 $q(\theta)\le Mg(\theta)$가 되도록 $M \ge \sup_\theta q(\theta)/g(\theta)$를 잡고, $\theta^*\sim g$와 $u\sim\text{Uniform}(0,1)$을 뽑아 $u \le q(\theta^*)/\{Mg(\theta^*)\}$이면 채택합니다. 채택된 표본의 분포는 정확히 $p(\theta\mid y)$이고 전체 수용률(acceptance rate)은 위와 같습니다. $d$차원에서 $g$가 축마다 조금씩 어긋나면 그 불일치가 곱으로 누적되어 $M$이 지수적으로 커집니다. 주어진 데이터에서 $m(y)$는 상수이므로 수용률 $m(y)/M$은 $M$에 반비례하고, 따라서 지수적으로 떨어집니다. 실무에서 기각표집은 대체로 1~3차원용입니다.
+:::
+
+## 중요도표집
+
+버리는 게 아까우니 전부 쓰되 가중치를 주자는 발상입니다. $g$에서 뽑은 점들은 어떤 영역은 과대표집, 어떤 영역은 과소표집되어 있으므로, 각 점에 $w = q/g$라는 보정 가중치를 붙이면 가중평균이 사후 기댓값의 일치추정량이 됩니다. $q$가 비정규화 상태여도 괜찮습니다. 가중치 합이 1이 되도록 나누면(자기정규화, self-normalized) 모르는 상수가 분자·분모에서 상쇄되기 때문입니다. 품질은 가중치가 얼마나 고르게 퍼져 있는지로 잽니다. 소수의 점이 가중치를 독식하면 표본 수는 많아도 실질적으로는 몇 개짜리 표본이고, 이를 수치화한 것이 유효표본수(effective sample size, ESS)입니다.
+
+::: {.callout-note collapse="true"}
+## 수식으로 보기
+
+$$\text{ESS} = \frac{\left(\sum_s w_s\right)^2}{\sum_s w_s^2} = \frac{1}{\sum_s \tilde w_s^2}$$
+
+$\theta_1,\dots,\theta_S \sim g$에 대해 $w_s = q(\theta_s)/g(\theta_s)$, $\tilde w_s = w_s/\sum_j w_j$라 두면 $\mathbb{E}[h(\theta)\mid y] \approx \sum_s \tilde w_s h(\theta_s)$이고 ESS는 위와 같이 정의됩니다. 가중치가 모두 같으면 $\text{ESS}=S$, 한 점이 전부 차지하면 $\text{ESS}=1$입니다. 추정량의 분산은 $\text{Var}[q(\theta)/g(\theta)] < \infty$일 때만 유한한데, 이는 $g$의 꼬리가 $q$의 꼬리보다 두꺼울 것을 요구합니다.
+:::
+
+::: {.callout-warning}
+제안분포의 꼬리가 사후보다 얇으면 $w=q/g$가 꼬리에서 발산합니다. 아주 드물게 뽑히는 한 점이 엄청난 가중치를 받아 추정값이 그 점 하나에 좌우되고, 표본 수를 늘려도 수렴하지 않습니다. 정규 제안분포 대신 자유도가 낮은 $t$ 분포를 쓰는 이유가 이것입니다.
+:::
+
+## 네 방법 비교, 그리고 왜 MCMC인가
+
+| 방법 | 출력 | 정확도 | 차원 확장성 | 주요 실패 모드 |
+|---|---|---|---|---|
+| 격자 근사 | 격자 위 밀도 | 촘촘하면 사실상 정답 | $G^d$, 3차원 이상 불가 | 범위를 좁게 잡아 꼬리 절단 |
+| 라플라스 근사 | 정규분포 모수 | 대표본에서만 양호 | 매우 좋음(최적화 1회) | 비대칭·다봉·소표본 |
+| 기각표집 | 정확한 독립표본 | 근사 오차 없음 | 나쁨(수용률 지수적 감소) | $M$을 못 찾음, 수용률 0에 근접 |
+| 중요도표집 | 가중표본 | 가중치가 고르면 양호 | 보통(ESS 급락) | 제안분포 꼬리가 얇을 때 발산 |
+
+격자·기각·중요도는 모두 **모수 공간 전체를 미리 덮으려** 합니다. 차원이 오르면 사후가 실제로 차지하는 부피는 전체의 극히 일부가 되므로 이 전략은 반드시 무너집니다. 라플라스만 국소적이지만 대신 모양을 정규분포로 고정해 버립니다. MCMC는 공간을 덮는 대신 현재 위치에서 다음 위치로 **걸어 다니면서** 확률이 높은 곳에 오래 머무는 마르코프 연쇄를 만듭니다. 전역 제안분포가 필요 없고 비정규화 사후의 비(ratio)만 계산하면 되며, 대가는 표본이 서로 독립이 아니라는 점입니다.
+
+## 실습: base R로 직접 구현
+
+### 0단계. 공통 예제 만들기
+
+가상의 데이터입니다. 이형접합 부위 하나에서 read 40개를 관측했고 참 대립유전자 비율은 0.25로 두었습니다. 표본 변동 때문에 관측 비율은 참값과 다소 다르게 나옵니다.
+
+```{r}
+#| label: setup-model
+set.seed(42); n_reads <- 40
+y_alt <- rbinom(1, size = n_reads, prob = 0.25)          # 참 비율 0.25에서 생성
+cat("관측된 대립유전자 read 수:", y_alt, "/", n_reads, "\n")
+
+log1pexp <- function(x) ifelse(x > 30, x, log1p(exp(x))) # 오버플로 방지 도우미
+# 로그 비정규화 사후: 로짓 스케일 모수 beta, 사전 N(0, 1.5^2)
+log_post <- function(beta, y = y_alt, n = n_reads, s = 1.5) {
+  y * beta - n * log1pexp(beta) + dnorm(beta, 0, s, log = TRUE)
+}
+```
+
+### 1단계. 격자 근사로 기준선 만들기
+
+1차원이므로 촘촘한 격자는 사실상 정답입니다. 이후 세 방법을 이 기준선과 비교합니다.
+
+```{r}
+#| label: grid-fit
+beta_grid <- seq(-6, 2, length.out = 2000)               # 충분히 넓은 범위
+lp_grid <- log_post(beta_grid); w_grid <- exp(lp_grid - max(lp_grid))
+p_grid <- w_grid / sum(w_grid)                           # 격자 위 확률질량
+dens_grid <- p_grid / (beta_grid[2] - beta_grid[1])      # 밀도 곡선용
+# 범위 점검: 양 끝의 상대 밀도가 작아야 꼬리가 잘리지 않습니다
+cat("격자 양 끝의 상대 밀도:", signif(w_grid[c(1, 2000)], 3), "\n")
+
+weighted_q <- function(x, w, probs) {                    # 가중표본의 분위수
+  o <- order(x); x_s <- x[o]; cw <- cumsum(w[o]) / sum(w)
+  sapply(probs, function(p) x_s[which.max(cw >= p)])
+}
+mean_grid <- sum(beta_grid * p_grid); theta_grid <- sum(plogis(beta_grid) * p_grid)
+ci_grid <- weighted_q(beta_grid, p_grid, c(0.025, 0.975))
+cat("사후평균(beta):", round(mean_grid, 3), " 95% 구간:", round(ci_grid, 3),
+    " 사후평균(theta):", round(theta_grid, 3), "\n")
+```
+
+### 2단계. `optim`으로 MAP와 헤시안
+
+음의 로그사후를 최소화하고 헤시안을 받아 라플라스 근사를 만든 뒤, 기준선과 겹쳐 그립니다.
+
+```{r}
+#| label: laplace-fit
+fit_lap <- optim(par = 0, fn = function(b) -log_post(b), method = "BFGS", hessian = TRUE)
+beta_map <- fit_lap$par                                  # 최빈값 (MAP)
+sd_lap <- sqrt(1 / fit_lap$hessian[1, 1])                # 헤시안 역행렬의 제곱근
+cat("MAP:", round(beta_map, 3), " 라플라스 표준편차:", round(sd_lap, 3), "\n")
+
+plot(beta_grid, dens_grid, type = "l", lwd = 2, col = "#1a6e3c", xlim = c(-2, 1),
+     main = "격자 기준선 vs 라플라스 정규근사",
+     xlab = "beta (로짓 스케일)", ylab = "사후 밀도")
+lines(beta_grid, dnorm(beta_grid, beta_map, sd_lap), lwd = 2, lty = 2, col = "#c0392b")
+abline(v = beta_map, col = "grey60", lty = 3)
+legend("topleft", bty = "n", legend = c("격자 (기준선)", "라플라스 근사", "MAP"),
+       col = c("#1a6e3c", "#c0392b", "grey60"), lwd = c(2, 2, 1), lty = c(1, 2, 3))
+```
+
+$n=40$이면 두 곡선이 거의 겹칩니다. 다만 격자 곡선이 왼쪽으로 살짝 더 끌리는 비대칭이 남아 있습니다.
+
+### 3단계. 기각표집
+
+제안분포로 라플라스 근사를 넓힌 정규분포를 쓰고, 덮개 상수 $M$은 격자 위에서 비 $q/g$의 최댓값으로 잡습니다.
+
+```{r}
+#| label: rejection
+set.seed(42)
+prop_mean <- beta_map; prop_sd <- 1.6 * sd_lap           # 꼬리를 덮도록 넉넉하게
+log_g_grid <- dnorm(beta_grid, prop_mean, prop_sd, log = TRUE)
+log_m <- max(lp_grid - log_g_grid) + 0.05                # log M (작은 여유 포함)
+n_prop <- 20000; prop <- rnorm(n_prop, prop_mean, prop_sd)
+log_ratio <- log_post(prop) - dnorm(prop, prop_mean, prop_sd, log = TRUE) - log_m
+accept <- log(runif(n_prop)) < log_ratio                 # 수용확률 q/(M g)
+samp_rej <- prop[accept]
+cat("제안:", n_prop, " 채택:", length(samp_rej), " 수용률:", round(mean(accept), 3), "\n")
+
+par(mfrow = c(1, 2))
+plot(beta_grid, exp(lp_grid - max(lp_grid)), type = "l", lwd = 2, col = "#1a6e3c",
+     xlim = c(-3, 2), main = "덮개 Mg 와 비정규화 사후 q", xlab = "beta", ylab = "상대 높이")
+lines(beta_grid, exp(log_m + log_g_grid - max(lp_grid)), lwd = 2, col = "#c0392b")
+legend("topright", bty = "n", legend = c("q (비정규화 사후)", "M g (덮개)"),
+       col = c("#1a6e3c", "#c0392b"), lwd = 2)
+hist(samp_rej, breaks = 40, freq = FALSE, border = "white", col = "grey80", xlim = c(-2, 1),
+     main = "기각표집 표본 vs 기준선", xlab = "beta", ylab = "밀도")
+lines(beta_grid, dens_grid, lwd = 2, col = "#1a6e3c")
+```
+
+수용률은 $m(y)/M$과 같습니다. 1차원이고 제안분포가 사후와 거의 같은 모양이라 60% 가까이 나옵니다. 같은 방식이라도 10차원에서 축마다 제안이 조금씩 어긋나면 그 불일치가 곱으로 누적되어 수용률이 사실상 0이 됩니다.
+
+### 4단계. 중요도표집과 ESS
+
+같은 제안분포에서 뽑되 버리지 않고 가중치를 줍니다.
+
+```{r}
+#| label: importance
+set.seed(42)
+n_is <- 20000; prop_is <- rnorm(n_is, prop_mean, prop_sd)
+log_w <- log_post(prop_is) - dnorm(prop_is, prop_mean, prop_sd, log = TRUE)
+w_norm <- exp(log_w - max(log_w))                        # 스케일은 자기정규화로 상쇄
+w_norm <- w_norm / sum(w_norm)
+ess <- 1 / sum(w_norm^2)                                 # = (sum w)^2 / sum(w^2)
+mean_is <- sum(w_norm * prop_is)
+ci_is <- weighted_q(prop_is, w_norm, c(0.025, 0.975))
+theta_is <- sum(w_norm * plogis(prop_is))
+cat("표본 수:", n_is, " ESS:", round(ess, 1), " 효율:", round(ess / n_is, 3), "\n")
+```
+
+제안분포의 폭을 좁게·넓게 바꿔 가며 ESS가 어떻게 변하는지 봅니다.
+
+```{r}
+#| label: ess-scan
+set.seed(42)
+scales <- c(0.4, 0.7, 1.0, 1.6, 3.0, 6.0); n_scan <- 5000  # 라플라스 표준편차의 배수
+ess_vec <- numeric(length(scales)); max_w <- numeric(length(scales))
+for (i in seq_along(scales)) {
+  s_i <- scales[i] * sd_lap
+  x_i <- rnorm(n_scan, prop_mean, s_i)
+  lw_i <- log_post(x_i) - dnorm(x_i, prop_mean, s_i, log = TRUE)
+  ww_i <- exp(lw_i - max(lw_i)); ww_i <- ww_i / sum(ww_i)
+  ess_vec[i] <- 1 / sum(ww_i^2); max_w[i] <- max(ww_i)   # 최대 가중치 점유율
+}
+print(data.frame(scale = scales, ess = round(ess_vec, 1),
+                 efficiency = round(ess_vec / n_scan, 3), max_weight = round(max_w, 4)))
+
+par(mfrow = c(1, 2))
+hist(w_norm * n_is, breaks = 60, col = "grey80", border = "white",
+     main = "정규화 가중치 분포", xlab = "S x w (1이면 균등)", ylab = "빈도")
+abline(v = 1, col = "#c0392b", lwd = 2, lty = 2)
+plot(scales, ess_vec / n_scan, type = "b", pch = 19, lwd = 2, col = "#2c7fb8", ylim = c(0, 1),
+     main = "제안분포 폭과 유효표본 비율",
+     xlab = "제안 표준편차 / 라플라스 표준편차", ylab = "ESS / S")
+abline(h = 1, col = "grey60", lty = 3)
+```
+
+제안분포의 폭이 사후와 비슷할 때(1.0배) 효율이 0.996으로 최대이고, 양쪽 어느 방향으로 벗어나도 떨어집니다. 좁은 쪽은 0.7배에서 0.325, 0.4배에서 0.114로 급락하고, 넓은 쪽은 1.6배에서 0.792, 3.0배에서 0.448, 6.0배에서 0.232로 완만하게 내려갑니다. 좁으면 제안분포 꼬리가 사후보다 얇아 소수의 점이 가중치를 독식하고, 넓으면 대부분의 점이 사후가 거의 0인 곳에 떨어져 낭비됩니다. 다만 폭을 사후에 정확히 맞추는 것이 실무 지침은 아닙니다. 정규 제안분포는 좁은 쪽으로 어긋나는 순간 $w=q/g$의 분산이 발산하고 ESS는 그 위험을 늦게 알려 줍니다. 그래서 실무에서는 폭을 맞추려 애쓰기보다 꼬리가 두꺼운 $t$ 제안분포를 써서 좁은 쪽 실패 자체를 막습니다(연습문제 3 참고).
+
+### 5단계. 네 방법 결과 비교
+
+```{r}
+#| label: compare
+set.seed(42); samp_lap <- rnorm(20000, beta_map, sd_lap) # 라플라스 근사의 theta 평균용
+res <- data.frame(
+  method = c("grid", "laplace", "rejection", "importance"),
+  mean_beta = c(mean_grid, beta_map, mean(samp_rej), mean_is),
+  lower = c(ci_grid[1], beta_map - 1.96 * sd_lap, quantile(samp_rej, 0.025), ci_is[1]),
+  upper = c(ci_grid[2], beta_map + 1.96 * sd_lap, quantile(samp_rej, 0.975), ci_is[2]),
+  mean_theta = c(theta_grid, mean(plogis(samp_lap)), mean(plogis(samp_rej)), theta_is))
+res[, 2:5] <- round(res[, 2:5], 3)
+print(res, row.names = FALSE)
+```
+
+네 값이 소수점 둘째 자리까지 거의 일치합니다. 다만 라플라스의 `mean_beta`는 사후평균이 아니라 최빈값이며, 사후가 비대칭이면 둘은 달라집니다.
+
+## 연습문제
+
+**문제 1.** 모수 두 개 $(\beta_0,\beta_1)$을 각 축 200등분한 2차원 격자를 만든다고 합시다. 격자점당 로그사후 평가에 20마이크로초가 걸린다면 총 몇 초가 걸립니까? 같은 정밀도를 모수 6개에 적용하면 어떻게 됩니까?
+
+::: {.callout-note collapse="true"}
+## 풀이
+
+```{r}
+#| label: ex1
+g <- 200; cost <- 20e-6                                  # 축당 등분 수, 평가 1회당 초
+for (d in c(2, 6)) {
+  total_sec <- g^d * cost
+  cat("d =", d, " 격자점:", signif(g^d, 3), " 초:", signif(total_sec, 3),
+      " 년:", signif(total_sec / 3.156e7, 3), "\n")
+}
+cat("축당 50등분으로 낮추면 d = 6 일 때 일수:", signif(50^6 * cost / 86400, 3), "\n")
+```
+
+2차원은 4만 점, 0.8초로 아무 문제가 없습니다. 6차원은 $6.4\times10^{13}$ 점이 되어 약 41년이 걸립니다. 축당 등분 수를 50으로 줄여도 사흘 반이 걸리면서 정밀도만 잃습니다. 격자 근사는 차원을 늘리는 방향으로는 어떤 타협도 통하지 않습니다.
+:::
+
+**문제 2.** 표본이 매우 작고 관측값이 경계에 붙은 경우($y=0$, $n=4$)에 약한 사전 $\beta\sim N(0,5^2)$을 쓰면 라플라스 근사가 얼마나 빗나갑니까? 격자 기준선과 겹쳐 그리고 $P(\theta<0.1\mid y)$를 두 방법으로 비교하십시오.
+
+::: {.callout-note collapse="true"}
+## 풀이
+
+```{r}
+#| label: ex2
+lp_small <- function(b) -4 * log1pexp(b) + dnorm(b, 0, 5, log = TRUE)  # y=0, n=4
+bg2 <- seq(-25, 5, length.out = 4000)                    # 왼쪽 꼬리가 길어 범위를 넓게
+p2 <- exp(lp_small(bg2) - max(lp_small(bg2))); p2 <- p2 / sum(p2)
+fit2 <- optim(par = 0, fn = function(b) -lp_small(b), method = "BFGS", hessian = TRUE)
+map2 <- fit2$par; sd2 <- sqrt(1 / fit2$hessian[1, 1])
+
+plot(bg2, p2 / (bg2[2] - bg2[1]), type = "l", lwd = 2, col = "#1a6e3c", xlim = c(-20, 5),
+     main = "소표본 경계값에서 라플라스 근사의 실패", xlab = "beta", ylab = "사후 밀도")
+lines(bg2, dnorm(bg2, map2, sd2), lwd = 2, lty = 2, col = "#c0392b")
+legend("topleft", bty = "n", legend = c("격자 (기준선)", "라플라스 근사"),
+       col = c("#1a6e3c", "#c0392b"), lwd = 2, lty = c(1, 2))
+
+cut_beta <- qlogis(0.1)                                  # theta = 0.1 에 해당하는 beta
+cat("MAP:", round(map2, 2), " 라플라스 sd:", round(sd2, 2),
+    " P(theta<0.1) 격자:", round(sum(p2[bg2 < cut_beta]), 3),
+    " 라플라스:", round(pnorm(cut_beta, map2, sd2), 3), "\n")
+```
+
+$y=0$이면 가능도는 $\beta$가 작아질수록 커지기만 하고, 왼쪽을 막아 주는 것은 약한 사전뿐입니다. 그 결과 사후는 왼쪽으로 심하게 늘어진 비대칭 분포가 됩니다. 라플라스는 이를 대칭 정규분포로 바꾸면서 오른쪽 꼬리에 없는 확률을 만들고 왼쪽 꼬리는 잘라냅니다. 꼬리확률처럼 분포의 끝을 쓰는 요약통계일수록 오차가 커집니다.
+:::
+
+**문제 3.** 4단계 스캔에서 효율이 가장 나빴던 쪽(0.4배)과 마찬가지로 좁은 0.5배 제안분포를 쓰되, 정규분포 대신 자유도 3인 $t$ 분포로 바꾸면 ESS가 개선됩니까? 두 제안분포의 ESS와 최대 가중치 점유율을 비교하십시오.
+
+::: {.callout-note collapse="true"}
+## 풀이
+
+```{r}
+#| label: ex3
+set.seed(42)
+n_ex <- 10000; s_ex <- 0.5 * sd_lap                      # 일부러 좁은 척도
+x_norm <- rnorm(n_ex, prop_mean, s_ex)                   # (a) 정규 제안분포
+lw_n <- log_post(x_norm) - dnorm(x_norm, prop_mean, s_ex, log = TRUE)
+ww_n <- exp(lw_n - max(lw_n)); ww_n <- ww_n / sum(ww_n)
+x_t <- prop_mean + s_ex * rt(n_ex, df = 3)               # (b) 자유도 3인 t 제안분포
+lw_t <- log_post(x_t) - dt((x_t - prop_mean) / s_ex, df = 3, log = TRUE) + log(s_ex)
+ww_t <- exp(lw_t - max(lw_t)); ww_t <- ww_t / sum(ww_t)  # 위치-척도 변환에 1/s 보정
+print(data.frame(proposal = c("normal", "t(df=3)"),
+                 ess = round(c(1 / sum(ww_n^2), 1 / sum(ww_t^2)), 1),
+                 max_weight = round(c(max(ww_n), max(ww_t)), 4),
+                 mean_beta = round(c(sum(ww_n * x_norm), sum(ww_t * x_t)), 3)),
+      row.names = FALSE)
+cat("격자 기준선 사후평균:", round(mean_grid, 3), "\n")
+```
+
+척도가 같아도 $t$ 분포는 꼬리가 두꺼워 사후의 꼬리 영역에도 제안점을 공급합니다. 그 결과 $w=q/g$가 꼬리에서 폭발하지 않아 최대 가중치 점유율이 내려가고 ESS가 크게 올라갑니다. 추정된 사후평균도 기준선에 더 가깝습니다. 제안분포를 고를 때 위치와 척도보다 **꼬리의 두께**가 먼저라는 것이 핵심입니다.
+:::
+
+## 정리
+
+- 켤레가 아니면 $m(y)=\int p(y\mid\theta)p(\theta)d\theta$를 풀 수 없지만 비정규화 사후 $q(\theta)=p(y\mid\theta)p(\theta)$는 언제나 계산할 수 있습니다. 이번 주의 모든 방법이 여기서 출발합니다.
+- 격자 근사는 1~2차원에서 사실상 정답이고 기준선으로 쓰기 좋습니다. 격자점이 $G^d$로 늘어나 3차원을 넘기면 쓸 수 없습니다.
+- 라플라스 근사는 `optim(..., hessian = TRUE)` 한 번으로 끝나고 고차원에서도 빠릅니다. 대신 사후가 비대칭·다봉이거나 표본이 작으면 꼬리확률부터 크게 틀립니다.
+- 기각표집은 정확한 독립표본을 주지만 덮개 상수 $M$이 필요하고 차원이 오르면 수용률이 지수적으로 떨어집니다. 중요도표집은 모든 표본을 쓰지만 품질이 제안분포에 달려 있어 ESS $=(\sum w)^2/\sum w^2$를 반드시 확인해야 하고, 꼬리가 두꺼운 $t$ 제안분포를 기본으로 삼습니다.
+- 셋은 모수 공간 전체를 덮으려 하고 하나는 모양을 정규분포로 고정합니다. 고차원 사후를 다루려면 전혀 다른 전략이 필요합니다.
+
+## 다음 시간
+
+[W5](05_mcmc_basics.qmd)에서는 마르코프 연쇄 몬테카를로(MCMC)를 다룹니다. 전역 제안분포 없이 현재 위치에서 다음 위치로 이동하며 사후를 탐색하는 메트로폴리스-헤이스팅스(Metropolis-Hastings) 알고리즘을 base R로 직접 구현하고, 이번 주의 격자 기준선과 같은 결과가 나오는지 확인합니다. 표본이 독립이 아니라는 대가 때문에 새로 필요해지는 수렴 진단(trace plot, 자기상관, $\hat{R}$)도 함께 봅니다.
+
