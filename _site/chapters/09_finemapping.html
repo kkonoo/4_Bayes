@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.32">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Eunji Ha">
+<meta name="dcterms.date" content="2026-09-21">
+<meta name="description" content="근사 베이즈 인자로 SNP별 인과 사후확률(PIP)과 신용집합을 구하고, 인과 변이가 여럿일 때 SuSiE로 신호를 나누는 법.">
+
+<title>W9. GWAS fine-mapping – 베이지안 통계</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../images/logo.ico" rel="icon">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-b7acaf8b0572301ab572ffd94e5b5c34.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<style>html{ scroll-behavior: smooth; }</style>
+<meta name="ai-title" content="W9. GWAS fine-mapping">
+<meta name="ai-context" content="
+이 챕터는 GWAS 좌위(locus)에서 어느 SNP가 인과 변이인지 확률로 답하는 fine-mapping을 다룹니다. 가상의 데이터는 n = 1500명, p = 60개 SNP이며, 잠재 다변량정규(AR(1) 상관 rho)를 대립유전자 빈도 af에 맞춰 잘라 반수체(0/1)를 만들고 두 반수체를 더해 유전형 0/1/2를 만듭니다(sim_hap, to_geno, make_locus). 연관 불균형(LD) 때문에 인과 SNP 주변의 많은 SNP가 함께 유의해지므로 p-value 순위는 인과 확률이 아닙니다. SNP별 단순회귀 요약통계는 sumstats 함수로 beta_hat, se, z = beta_hat/se, p를 한꺼번에 구합니다.
+Wakefield(2009)의 근사 베이즈 인자(ABF)는 beta_hat ~ N(beta, V), V = se^2, 사전 beta ~ N(0, W) 아래에서 H1 대 H0의 비로, r = W/(V+W) 일 때 log ABF = 0.5*log(1-r) + 0.5*r*z^2 입니다(함수 log_abf(beta_hat, se, W), coloc과 같은 H1/H0 방향). W는 효과 크기의 사전분산으로 정량형질에서 coloc 기본값 W = 0.15^2 (Giambartolomei et al. 2014)를 씁니다. W가 V보다 충분히 크면 같은 z라도 n이 10배 커질 때 ABF는 약 sqrt(10)배 작아지고, ABF를 최대로 만드는 W는 V*(z^2-1) 입니다. 단일 인과 가정과 균등 사전확률 아래 사후포함확률은 PIP_j = ABF_j / sum_k ABF_k (pip_single, log_sum_exp 사용)이고, 95% 신용집합(credible set)은 PIP 내림차순 누적합이 0.95 이상이 되는 최소 집합입니다(credible_set, Maller et al. 2012). LD가 강할수록 신용집합이 커집니다.
+인과 변이가 둘이면 단일 인과 가정이 깨집니다. 두 인과 변이 A, B를 모두 싣는 반수체의 태그 SNP T가 있으면 PIP가 T에 몰리고 95% 신용집합이 인과 변이를 하나도 담지 않을 수 있습니다(make_trap). SuSiE(Wang, Sarkar, Carbonetto and Stephens 2020)는 y = sum_l X b_l + e 로 쓰고 각 b_l이 원소 하나만 0이 아닌 단일효과입니다. 단일효과회귀(SER, 함수 ser)는 잔차 r에 대해 beta_hat_j = x_j'r/x_j'x_j, s_j^2 = sigma^2/x_j'x_j 로 SNP별 BF(=Wakefield ABF, W = sigma0^2)를 구하고 alpha_j ∝ pi_j BF_j, 사후분산 1/(1/sigma0^2 + x_j'x_j/sigma^2), 사후평균 사후분산*x_j'r/sigma^2 를 줍니다. sigma0^2는 optimize로 log(sum pi_j BF_j)를 최대화하고 개선이 0.1 이하면 0으로 둡니다(susieR의 check_null_threshold, 기본값 0). 반복 베이즈 단계적 적합(IBSS, 함수 susie_ibss)은 효과를 하나씩 돌며 SER을 다시 적합하고 잔차분산은 기대 잔차제곱합/n으로 갱신합니다. 전체 PIP_j = 1 - prod_l (1 - alpha_lj), 효과별 95% 신용집합의 순도(purity, 집합 안 SNP 쌍의 |r| 최솟값)가 0.5 미만이면 버립니다(susie_cs, susieR의 min_abs_corr = 0.5). 패키지 실습은 susieR의 susie, susie_get_cs, susie_plot, susie_rss 이고 실행하지 않습니다. 실무 함정은 외부 LD 참조 패널 불일치(Zou et al. 2022), 대립유전자 방향 정렬, W 민감도, 신용집합 커버리지가 모형 가정 아래에서만 성립한다는 점입니다.
+">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../assets/html.css">
+</head>
+
+<body class="nav-sidebar floating nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../index.html">
+    <span class="navbar-title">베이지안 통계</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link active" href="../index.html" aria-current="page"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+</ul>
+            <ul class="navbar-nav navbar-nav-scroll ms-auto">
+  <li class="nav-item compact">
+    <a class="nav-link" href="https://github.com/kkonoo/4_Bayes"> <i class="bi bi-github" role="img">
+</i> 
+<span class="menu-text"></span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../chapters/08_bayesian_regression.html">Part 2. 생명정보학 응용</a></li><li class="breadcrumb-item"><a href="../chapters/09_finemapping.html">W9. GWAS fine-mapping</a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-full page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Home</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 1. 베이지안 통계의 기초</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/01_probability_bayes.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W1. 확률과 베이즈 정리</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/02_conjugate.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W2. 켤레사전분포 (Conjugate Priors)</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/03_prior_posterior.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W3. 사전분포의 선택과 사후 요약</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/04_approximation.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W4. 사후분포의 수치적 근사</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/05_mcmc_basics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W5. MCMC 기초 — Metropolis–Hastings와 Gibbs</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/06_hmc_diagnostics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W6. HMC와 수렴 진단</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/07_hierarchical_modelcomp.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W7. 계층 모형과 모델 비교</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 2. 생명정보학 응용</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/08_bayesian_regression.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W8. 베이지안 회귀와 축소사전분포</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/09_finemapping.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text">W9. GWAS fine-mapping</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/10_colocalization.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W10. Colocalization</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/11_hmm_chromatin.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W11. HMM 기반 chromatin state</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/12_cnv_calling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W12. CNV calling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/13_capstone.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W13. 캡스톤: 자기 데이터에 베이지안 모형 적용하기</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Contents</h2>
+   
+  <ul>
+  <li><a href="#학습-목표" id="toc-학습-목표" class="nav-link active" data-scroll-target="#학습-목표">학습 목표</a></li>
+  <li><a href="#가상의-좌위-만들기" id="toc-가상의-좌위-만들기" class="nav-link" data-scroll-target="#가상의-좌위-만들기">가상의 좌위 만들기</a></li>
+  <li><a href="#근사-베이즈-인자" id="toc-근사-베이즈-인자" class="nav-link" data-scroll-target="#근사-베이즈-인자">근사 베이즈 인자</a></li>
+  <li><a href="#단일-인과-가정-pip와-신용집합" id="toc-단일-인과-가정-pip와-신용집합" class="nav-link" data-scroll-target="#단일-인과-가정-pip와-신용집합">단일 인과 가정: PIP와 신용집합</a></li>
+  <li><a href="#함정-인과-변이가-둘이면" id="toc-함정-인과-변이가-둘이면" class="nav-link" data-scroll-target="#함정-인과-변이가-둘이면">함정: 인과 변이가 둘이면</a></li>
+  <li><a href="#susie-단일효과의-합" id="toc-susie-단일효과의-합" class="nav-link" data-scroll-target="#susie-단일효과의-합">SuSiE: 단일효과의 합</a></li>
+  <li><a href="#실습-base-r로-직접-구현" id="toc-실습-base-r로-직접-구현" class="nav-link" data-scroll-target="#실습-base-r로-직접-구현">실습: base R로 직접 구현</a>
+  <ul>
+  <li><a href="#단일효과회귀와-ibss" id="toc-단일효과회귀와-ibss" class="nav-link" data-scroll-target="#단일효과회귀와-ibss">(1) 단일효과회귀와 IBSS</a></li>
+  <li><a href="#태그-snp-좌위에-적용" id="toc-태그-snp-좌위에-적용" class="nav-link" data-scroll-target="#태그-snp-좌위에-적용">(2) 태그 SNP 좌위에 적용</a></li>
+  <li><a href="#번-반복-susie도-만능은-아니다" id="toc-번-반복-susie도-만능은-아니다" class="nav-link" data-scroll-target="#번-반복-susie도-만능은-아니다">(3) 20번 반복: SuSiE도 만능은 아니다</a></li>
+  </ul></li>
+  <li><a href="#실습-패키지로-풀기" id="toc-실습-패키지로-풀기" class="nav-link" data-scroll-target="#실습-패키지로-풀기">실습: 패키지로 풀기</a></li>
+  <li><a href="#연습문제" id="toc-연습문제" class="nav-link" data-scroll-target="#연습문제">연습문제</a>
+  <ul>
+  <li><a href="#문제-1.-w가-pip와-신용집합에-주는-영향" id="toc-문제-1.-w가-pip와-신용집합에-주는-영향" class="nav-link" data-scroll-target="#문제-1.-w가-pip와-신용집합에-주는-영향">문제 1. W가 PIP와 신용집합에 주는 영향</a></li>
+  <li><a href="#문제-2.-ld-강도와-신용집합-크기" id="toc-문제-2.-ld-강도와-신용집합-크기" class="nav-link" data-scroll-target="#문제-2.-ld-강도와-신용집합-크기">문제 2. LD 강도와 신용집합 크기</a></li>
+  <li><a href="#문제-3.-l-1인-susie는-단일-인과-abf와-같은가" id="toc-문제-3.-l-1인-susie는-단일-인과-abf와-같은가" class="nav-link" data-scroll-target="#문제-3.-l-1인-susie는-단일-인과-abf와-같은가">문제 3. L = 1인 SuSiE는 단일 인과 ABF와 같은가</a></li>
+  </ul></li>
+  <li><a href="#정리" id="toc-정리" class="nav-link" data-scroll-target="#정리">정리</a></li>
+  <li><a href="#다음-시간" id="toc-다음-시간" class="nav-link" data-scroll-target="#다음-시간">다음 시간</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content column-body" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../chapters/08_bayesian_regression.html">Part 2. 생명정보학 응용</a></li><li class="breadcrumb-item"><a href="../chapters/09_finemapping.html">W9. GWAS fine-mapping</a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title">W9. GWAS fine-mapping</h1>
+</div>
+
+<div>
+  <div class="description">
+    근사 베이즈 인자로 SNP별 인과 사후확률(PIP)과 신용집합을 구하고, 인과 변이가 여럿일 때 SuSiE로 신호를 나누는 법.
+  </div>
+</div>
+
+
+<div class="quarto-title-meta column-body">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Eunji Ha </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">September 21, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="학습-목표" class="level2">
+<h2 class="anchored" data-anchor-id="학습-목표">학습 목표</h2>
+<ul>
+<li>GWAS 좌위에서 p-value 순위가 왜 인과 확률이 아닌지 연관 불균형(LD)으로 설명할 수 있다.</li>
+<li>Wakefield 근사 베이즈 인자를 <span class="math inline">\(\hat\beta\)</span>, se, 사전분산 <span class="math inline">\(W\)</span>로 유도하고 <code>log_abf</code>로 구현할 수 있다.</li>
+<li>단일 인과 가정에서 사후포함확률(PIP)과 95% 신용집합을 계산하고, LD 강도와 <span class="math inline">\(W\)</span>가 신용집합 크기에 주는 영향을 설명할 수 있다.</li>
+<li>인과 변이가 둘일 때 단일 인과 가정이 어떻게 실패하는지 보이고, SuSiE의 단일효과회귀와 IBSS를 base R로 구현할 수 있다.</li>
+<li>신용집합의 순도, 외부 LD 참조 패널 불일치, 대립유전자 방향 같은 실무 함정을 점검할 수 있다.</li>
+</ul>
+<p>혈중 지질 같은 정량 형질(quantitative trait)의 GWAS에서 한 좌위(locus)의 리드 SNP(lead SNP)가 <span class="math inline">\(p = 10^{-12}\)</span>로 나왔다고 합시다. 주변 SNP 수십 개도 전장유전체 유의수준 <span class="math inline">\(5\times10^{-8}\)</span>을 넘습니다. 이 SNP들이 모두 형질에 영향을 준다고 보기는 어렵습니다. 대부분은 진짜 인과 변이(causal variant)와 같은 반수체(haplotype)에 함께 실려 다니기 때문에, 곧 <strong>연관 불균형(linkage disequilibrium, LD)</strong> 때문에 유의하게 보일 뿐입니다. CRISPR 편집이나 리포터 분석으로 넘길 후보는 몇 개로 줄여야 합니다. 그래서 묻고 싶은 것은 두 가지입니다. 각 SNP가 인과 변이일 확률은 얼마인가, 인과 변이를 95% 확률로 담는 가장 작은 SNP 집합은 몇 개짜리인가. p-value는 여기에 답하지 못합니다. p-value는 연관이 없다는 귀무가설 아래에서 데이터가 얼마나 극단적인지를 잴 뿐, 이웃 SNP 사이에 인과 확률을 나눠 주지 않습니다. <strong>세밀 매핑(fine-mapping)</strong>은 이 질문을 베이즈 정리로 풉니다. 핵심 재료는 <a href="../chapters/07_hierarchical_modelcomp.html">W7</a>의 베이즈 인자입니다.</p>
+</section>
+<section id="가상의-좌위-만들기" class="level2">
+<h2 class="anchored" data-anchor-id="가상의-좌위-만들기">가상의 좌위 만들기</h2>
+<p>아래는 모두 <strong>가상의 데이터</strong>입니다. SNP 60개, 1,500명의 좌위를 만듭니다. 각 반수체에서 SNP 60개의 잠재 변수를 AR(1) 상관(이웃일수록 상관이 큼)을 갖는 다변량정규로 뽑고, SNP마다 대립유전자 빈도에 맞춘 문턱값으로 잘라 0/1로 만듭니다. 사람마다 반수체 둘을 더하면 유전형 0/1/2가 됩니다. 두 SNP의 빈도가 크게 다르면 <span class="math inline">\(r^2\)</span>의 최댓값이 1보다 작게 묶이므로, 실제 LD 블록처럼 이웃 SNP의 빈도가 비슷하도록 빈도를 천천히 변하게 했습니다. 형질은 12번 SNP 하나만 인과인 모형으로 만들고 표준화합니다. 요약통계는 SNP별 단순회귀 <span class="math inline">\(y = a + \beta_j x_j + \varepsilon\)</span>의 <span class="math inline">\(\hat\beta_j\)</span>, <span class="math inline">\(\text{se}_j\)</span>, <span class="math inline">\(z_j = \hat\beta_j/\text{se}_j\)</span>입니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>ar1 <span class="ot">&lt;-</span> <span class="cf">function</span>(p, rho) rho<span class="sc">^</span><span class="fu">abs</span>(<span class="fu">outer</span>(<span class="dv">1</span><span class="sc">:</span>p, <span class="dv">1</span><span class="sc">:</span>p, <span class="st">"-"</span>))          <span class="co"># 잠재 AR(1) 상관행렬</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>sim_hap <span class="ot">&lt;-</span> <span class="cf">function</span>(n_hap, sigma_lat, af) {                     <span class="co"># 반수체(0/1): 잠재 정규를 빈도에 맞춰 자름</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  p <span class="ot">&lt;-</span> <span class="fu">ncol</span>(sigma_lat); thr <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">qnorm</span>(<span class="dv">1</span> <span class="sc">-</span> af), n_hap, p, <span class="at">byrow =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  (<span class="fu">matrix</span>(<span class="fu">rnorm</span>(n_hap <span class="sc">*</span> p), n_hap, p) <span class="sc">%*%</span> <span class="fu">chol</span>(sigma_lat) <span class="sc">&gt;</span> thr) <span class="sc">*</span> <span class="dv">1</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>to_geno <span class="ot">&lt;-</span> <span class="cf">function</span>(h) h[<span class="fu">c</span>(<span class="cn">TRUE</span>, <span class="cn">FALSE</span>), ] <span class="sc">+</span> h[<span class="fu">c</span>(<span class="cn">FALSE</span>, <span class="cn">TRUE</span>), ]  <span class="co"># 연속한 두 반수체를 더해 0/1/2</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>sumstats <span class="ot">&lt;-</span> <span class="cf">function</span>(X, y) {                                     <span class="co"># SNP별 단순회귀를 벡터 연산으로 한꺼번에</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>  xc <span class="ot">&lt;-</span> <span class="fu">scale</span>(X, <span class="at">scale =</span> <span class="cn">FALSE</span>); yc <span class="ot">&lt;-</span> y <span class="sc">-</span> <span class="fu">mean</span>(y); n <span class="ot">&lt;-</span> <span class="fu">length</span>(y)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  xtx <span class="ot">&lt;-</span> <span class="fu">colSums</span>(xc<span class="sc">^</span><span class="dv">2</span>); beta_hat <span class="ot">&lt;-</span> <span class="fu">drop</span>(<span class="fu">crossprod</span>(xc, yc)) <span class="sc">/</span> xtx</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>  se <span class="ot">&lt;-</span> <span class="fu">sqrt</span>((<span class="fu">sum</span>(yc<span class="sc">^</span><span class="dv">2</span>) <span class="sc">-</span> beta_hat<span class="sc">^</span><span class="dv">2</span> <span class="sc">*</span> xtx) <span class="sc">/</span> (n <span class="sc">-</span> <span class="dv">2</span>) <span class="sc">/</span> xtx); z <span class="ot">&lt;-</span> beta_hat <span class="sc">/</span> se</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">data.frame</span>(<span class="at">beta_hat =</span> beta_hat, <span class="at">se =</span> se, <span class="at">z =</span> z, <span class="at">p =</span> <span class="dv">2</span> <span class="sc">*</span> <span class="fu">pnorm</span>(<span class="sc">-</span><span class="fu">abs</span>(z)))</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>n <span class="ot">&lt;-</span> <span class="dv">1500</span>; p <span class="ot">&lt;-</span> <span class="dv">60</span>; causal <span class="ot">&lt;-</span> <span class="dv">12</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">2026</span>); af <span class="ot">&lt;-</span> <span class="fl">0.27</span> <span class="sc">+</span> <span class="fl">0.15</span> <span class="sc">*</span> <span class="fu">sin</span>(<span class="fu">seq</span>(<span class="dv">0</span>, <span class="dv">3</span> <span class="sc">*</span> pi, <span class="at">length.out =</span> p)) <span class="sc">+</span> <span class="fu">runif</span>(p, <span class="sc">-</span><span class="fl">0.01</span>, <span class="fl">0.01</span>)</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>make_locus <span class="ot">&lt;-</span> <span class="cf">function</span>(rho, seed, <span class="at">b =</span> <span class="fl">0.27</span>) {                    <span class="co"># 인과 SNP가 12번 하나인 가상의 좌위</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">set.seed</span>(seed); X <span class="ot">&lt;-</span> <span class="fu">to_geno</span>(<span class="fu">sim_hap</span>(<span class="dv">2</span> <span class="sc">*</span> n, <span class="fu">ar1</span>(p, rho), af))</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>  y <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>(<span class="fu">scale</span>(b <span class="sc">*</span> X[, causal] <span class="sc">+</span> <span class="fu">rnorm</span>(n)))              <span class="co"># 표준화한 연속 형질</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">X =</span> X, <span class="at">y =</span> y, <span class="at">ss =</span> <span class="fu">sumstats</span>(X, y))</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>loc_s <span class="ot">&lt;-</span> <span class="fu">make_locus</span>(<span class="at">rho =</span> <span class="fl">0.998</span>, <span class="at">seed =</span> <span class="dv">14</span>); ss <span class="ot">&lt;-</span> loc_s<span class="sc">$</span>ss; r_ld <span class="ot">&lt;-</span> <span class="fu">cor</span>(loc_s<span class="sc">$</span>X)   <span class="co"># LD 행렬 R</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>lead <span class="ot">&lt;-</span> <span class="fu">which.max</span>(<span class="fu">abs</span>(ss<span class="sc">$</span>z)); sec <span class="ot">&lt;-</span> <span class="fu">order</span>(ss<span class="sc">$</span>p)[<span class="dv">2</span>]; chk <span class="ot">&lt;-</span> <span class="fu">summary</span>(<span class="fu">lm</span>(loc_s<span class="sc">$</span>y <span class="sc">~</span> loc_s<span class="sc">$</span>X[, lead]))<span class="sc">$</span>coef[<span class="dv">2</span>, <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>]</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">"리드 SNP %d, p = %.1e | p &lt; 5e-8 인 SNP %d개 | 2위 SNP %d와 인과 SNP의 r = %.2f | lm 확인 %.4f, %.4f</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>            lead, ss<span class="sc">$</span>p[lead], <span class="fu">sum</span>(ss<span class="sc">$</span>p <span class="sc">&lt;</span> <span class="fl">5e-8</span>), sec, r_ld[causal, sec], chk[<span class="dv">1</span>], chk[<span class="dv">2</span>]))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>리드 SNP 12, p = 1.3e-12 | p &lt; 5e-8 인 SNP 28개 | 2위 SNP 44와 인과 SNP의 r = 0.75 | lm 확인 0.2630, 0.0370</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">round</span>(<span class="fu">head</span>(ss[<span class="fu">order</span>(ss<span class="sc">$</span>p), ], <span class="dv">5</span>), <span class="dv">4</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>   beta_hat     se      z p
+12   0.2630 0.0370 7.0994 0
+44   0.2612 0.0381 6.8474 0
+13   0.2516 0.0371 6.7745 0
+10   0.2503 0.0371 6.7449 0
+11   0.2451 0.0370 6.6168 0</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>))</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">image</span>(<span class="dv">1</span><span class="sc">:</span>p, <span class="dv">1</span><span class="sc">:</span>p, r_ld<span class="sc">^</span><span class="dv">2</span>, <span class="at">col =</span> <span class="fu">colorRampPalette</span>(<span class="fu">c</span>(<span class="st">"white"</span>, <span class="st">"#1a6e3c"</span>))(<span class="dv">50</span>), <span class="at">main =</span> <span class="st">"LD 행렬 (r^2)"</span>, <span class="at">xlab =</span> <span class="st">"SNP"</span>, <span class="at">ylab =</span> <span class="st">"SNP"</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="dv">1</span><span class="sc">:</span>p, <span class="sc">-</span><span class="fu">log10</span>(ss<span class="sc">$</span>p), <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> <span class="st">"grey60"</span>, <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">1.3</span> <span class="sc">*</span> <span class="fu">max</span>(<span class="sc">-</span><span class="fu">log10</span>(ss<span class="sc">$</span>p))), <span class="at">main =</span> <span class="st">"주변 연관 신호"</span>, <span class="at">xlab =</span> <span class="st">"SNP"</span>, <span class="at">ylab =</span> <span class="st">"-log10 p"</span>)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="fu">points</span>(causal, <span class="sc">-</span><span class="fu">log10</span>(ss<span class="sc">$</span>p[causal]), <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> <span class="st">"#c0392b"</span>, <span class="at">cex =</span> <span class="fl">1.3</span>); <span class="fu">abline</span>(<span class="at">h =</span> <span class="sc">-</span><span class="fu">log10</span>(<span class="fl">5e-8</span>), <span class="at">lty =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"grey30"</span>)</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"topright"</span>, <span class="fu">c</span>(<span class="st">"인과 SNP (12번)"</span>, <span class="st">"p = 5e-8"</span>), <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#c0392b"</span>, <span class="st">"grey30"</span>), <span class="at">pch =</span> <span class="fu">c</span>(<span class="dv">16</span>, <span class="cn">NA</span>), <span class="at">lty =</span> <span class="fu">c</span>(<span class="cn">NA</span>, <span class="dv">2</span>), <span class="at">bty =</span> <span class="st">"n"</span>, <span class="at">cex =</span> <span class="fl">0.8</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="09_finemapping_files/figure-html/sim-locus-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>리드 SNP는 인과 SNP인 12번이고 <span class="math inline">\(p = 1.3\times10^{-12}\)</span>입니다. 그런데 유의수준을 넘는 SNP가 28개이고, 두 번째로 강한 44번은 위치상 멀리 떨어져 있지만 인과 SNP와 <span class="math inline">\(r=0.75\)</span>로 묶여 있어 <span class="math inline">\(z\)</span>가 거의 같습니다(7.10 대 6.85). <code>lm</code>으로 확인한 리드 SNP의 <span class="math inline">\(\hat\beta\)</span>와 se도 <code>sumstats</code>와 같습니다.</p>
+</section>
+<section id="근사-베이즈-인자" class="level2">
+<h2 class="anchored" data-anchor-id="근사-베이즈-인자">근사 베이즈 인자</h2>
+<p>SNP 하나에 대해 두 가설을 비교합니다. <span class="math inline">\(H_0\)</span>은 효과가 0, <span class="math inline">\(H_1\)</span>은 효과 <span class="math inline">\(\beta\)</span>가 사전분포 <span class="math inline">\(\mathcal{N}(0, W)\)</span>를 따른다는 가설입니다. 표본이 크면 <span class="math inline">\(\hat\beta \sim \mathcal{N}(\beta, V)\)</span>, <span class="math inline">\(V = \text{se}^2\)</span>로 볼 수 있으므로 개인 수준 자료 없이 <span class="math inline">\(\hat\beta\)</span>와 se만으로 두 가설의 가능도를 계산할 수 있습니다. <span class="math inline">\(H_0\)</span> 아래 <span class="math inline">\(\hat\beta\)</span>의 분포는 <span class="math inline">\(\mathcal{N}(0, V)\)</span>이고, <span class="math inline">\(H_1\)</span> 아래에서는 효과 자체가 퍼져 있으므로 <span class="math inline">\(\mathcal{N}(0, V+W)\)</span>입니다. 관측된 <span class="math inline">\(\hat\beta\)</span>에서 두 정규 밀도의 비가 <strong>근사 베이즈 인자(approximate Bayes factor, ABF; Wakefield 2009)</strong>입니다. <span class="math inline">\(W\)</span>는 효과 크기가 대략 어느 범위일지에 대한 사전 믿음으로, 표준화한 정량 형질에서 coloc의 기본값 <span class="math inline">\(W = 0.15^2\)</span>(Giambartolomei et al.&nbsp;2014)을 쓰면 대립유전자당 효과가 95% 사전확률로 <span class="math inline">\(\pm 0.29\)</span> SD 안에 있다고 보는 셈입니다.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-1-contents" aria-controls="callout-1" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+수식으로 보기: Wakefield ABF
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-1" class="callout-1-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p><span class="math display">\[
+\text{ABF} = \frac{\mathcal{N}(\hat\beta;\,0,\,V+W)}{\mathcal{N}(\hat\beta;\,0,\,V)} = \sqrt{\frac{V}{V+W}}\,\exp\!\left(\frac{z^2}{2}\cdot\frac{W}{V+W}\right), \qquad z = \frac{\hat\beta}{\sqrt V}
+\]</span> <span class="math inline">\(r = W/(V+W)\)</span>로 두면 <span class="math inline">\(\log \text{ABF} = \tfrac12\log(1-r) + \tfrac12 r z^2\)</span>이고, 이것이 <code>log_abf</code>입니다. Wakefield(2009)의 원래 정의는 <span class="math inline">\(H_0/H_1\)</span> 방향이라 이 값의 역수이며, 여기서는 coloc처럼 <span class="math inline">\(H_1/H_0\)</span> 방향을 씁니다. <span class="math inline">\(W \gg V\)</span>이면 <span class="math inline">\(r \approx 1\)</span>이라 <span class="math inline">\(\text{ABF} \approx \sqrt{V/W}\,e^{z^2/2}\)</span>이고 <span class="math inline">\(V \propto 1/n\)</span>이므로, 같은 <span class="math inline">\(z\)</span>에서 <span class="math inline">\(n\)</span>이 10배 커지면 ABF는 약 <span class="math inline">\(\sqrt{10}\)</span>배 작아집니다. <span class="math inline">\(\log\text{ABF}\)</span>를 <span class="math inline">\(W\)</span>로 미분해 0으로 두면 최댓값은 <span class="math inline">\(W^\ast = V(z^2-1)\)</span>에서 나옵니다. 사전분산을 데이터로 고르는 이 아이디어는 뒤의 SuSiE에서 다시 씁니다.</p>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>log_sum_exp <span class="ot">&lt;-</span> <span class="cf">function</span>(x) { m <span class="ot">&lt;-</span> <span class="fu">max</span>(x); m <span class="sc">+</span> <span class="fu">log</span>(<span class="fu">sum</span>(<span class="fu">exp</span>(x <span class="sc">-</span> m))) }   <span class="co"># 수치 안정적인 log(sum(exp(x)))</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Wakefield(2009) 근사 베이즈 인자의 로그. H1(연관 있음) 대 H0(없음). coloc의 계산과 같음.</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>log_abf <span class="ot">&lt;-</span> <span class="cf">function</span>(beta_hat, se, W) {</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  V <span class="ot">&lt;-</span> se<span class="sc">^</span><span class="dv">2</span>; z <span class="ot">&lt;-</span> beta_hat <span class="sc">/</span> se; r <span class="ot">&lt;-</span> W <span class="sc">/</span> (V <span class="sc">+</span> W)</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="fl">0.5</span> <span class="sc">*</span> <span class="fu">log</span>(<span class="dv">1</span> <span class="sc">-</span> r) <span class="sc">+</span> <span class="fl">0.5</span> <span class="sc">*</span> r <span class="sc">*</span> z<span class="sc">^</span><span class="dv">2</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>se_of_n <span class="ot">&lt;-</span> <span class="cf">function</span>(n_ind, <span class="at">f =</span> <span class="fl">0.3</span>) <span class="fu">sqrt</span>(<span class="dv">1</span> <span class="sc">/</span> (n_ind <span class="sc">*</span> <span class="dv">2</span> <span class="sc">*</span> f <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> f)))   <span class="co"># 표준화 형질, 빈도 f일 때 se 근사</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>n_set <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">1e4</span>, <span class="fl">1e5</span>, <span class="fl">1e6</span>); w_sd <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="fl">0.15</span>, <span class="dv">1</span>)</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>tab <span class="ot">&lt;-</span> <span class="fu">outer</span>(n_set, w_sd, <span class="cf">function</span>(nn, w) <span class="fu">log_abf</span>(<span class="dv">5</span> <span class="sc">*</span> <span class="fu">se_of_n</span>(nn), <span class="fu">se_of_n</span>(nn), w<span class="sc">^</span><span class="dv">2</span>) <span class="sc">/</span> <span class="fu">log</span>(<span class="dv">10</span>))</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="fu">dimnames</span>(tab) <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="fu">paste</span>(<span class="st">"n ="</span>, <span class="fu">format</span>(n_set, <span class="at">scientific =</span> <span class="cn">FALSE</span>)), <span class="fu">paste</span>(<span class="st">"sqrt(W) ="</span>, w_sd))</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"z = 5 일 때 log10 ABF</span><span class="sc">\n</span><span class="st">"</span>); <span class="fu">print</span>(<span class="fu">round</span>(tab, <span class="dv">2</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>z = 5 일 때 log10 ABF</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>            sqrt(W) = 0.01 sqrt(W) = 0.15 sqrt(W) = 1
+n =   10000           1.53           4.38        3.62
+n =  100000           4.03           3.93        3.12
+n = 1000000           4.49           3.44        2.62</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>z_gw <span class="ot">&lt;-</span> <span class="fu">qnorm</span>(<span class="fl">2.5e-8</span>, <span class="at">lower.tail =</span> <span class="cn">FALSE</span>)                         <span class="co"># p = 5e-8 에 해당하는 z</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"p = 5e-8, W = 0.15^2 에서 log10 ABF:"</span>, <span class="fu">round</span>(<span class="fu">log_abf</span>(z_gw <span class="sc">*</span> <span class="fu">se_of_n</span>(n_set), <span class="fu">se_of_n</span>(n_set), <span class="fl">0.15</span><span class="sc">^</span><span class="dv">2</span>) <span class="sc">/</span> <span class="fu">log</span>(<span class="dv">10</span>), <span class="dv">2</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>p = 5e-8, W = 0.15^2 에서 log10 ABF: 5.4 4.96 4.46 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>)); z_grid <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="dv">0</span>, <span class="fl">8.5</span>, <span class="at">length.out =</span> <span class="dv">200</span>); cols <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"#2c7fb8"</span>, <span class="st">"#1a6e3c"</span>, <span class="st">"#c0392b"</span>)</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="cn">NULL</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">16</span>), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">2.5</span>, <span class="dv">15</span>), <span class="at">main =</span> <span class="st">"같은 p라도 n이 크면 ABF가 작다"</span>, <span class="at">xlab =</span> <span class="st">"-log10 p"</span>, <span class="at">ylab =</span> <span class="st">"log10 ABF (W = 0.15^2)"</span>)</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>) <span class="fu">lines</span>(<span class="sc">-</span><span class="fu">log10</span>(<span class="dv">2</span> <span class="sc">*</span> <span class="fu">pnorm</span>(<span class="sc">-</span>z_grid)), <span class="fu">log_abf</span>(z_grid <span class="sc">*</span> <span class="fu">se_of_n</span>(n_set[i]), <span class="fu">se_of_n</span>(n_set[i]), <span class="fl">0.15</span><span class="sc">^</span><span class="dv">2</span>) <span class="sc">/</span> <span class="fu">log</span>(<span class="dv">10</span>), <span class="at">col =</span> cols[i], <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="fu">abline</span>(<span class="at">h =</span> <span class="dv">0</span>, <span class="at">col =</span> <span class="st">"grey60"</span>, <span class="at">lty =</span> <span class="dv">2</span>); <span class="fu">abline</span>(<span class="at">v =</span> <span class="sc">-</span><span class="fu">log10</span>(<span class="fl">5e-8</span>), <span class="at">col =</span> <span class="st">"grey60"</span>, <span class="at">lty =</span> <span class="dv">3</span>)</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"topleft"</span>, <span class="at">legend =</span> <span class="fu">paste</span>(<span class="st">"n ="</span>, <span class="fu">format</span>(n_set, <span class="at">big.mark =</span> <span class="st">","</span>, <span class="at">scientific =</span> <span class="cn">FALSE</span>, <span class="at">trim =</span> <span class="cn">TRUE</span>)), <span class="at">col =</span> cols, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">bty =</span> <span class="st">"n"</span>)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>w_grid <span class="ot">&lt;-</span> <span class="dv">10</span><span class="sc">^</span><span class="fu">seq</span>(<span class="sc">-</span><span class="dv">5</span>, <span class="fl">0.5</span>, <span class="at">length.out =</span> <span class="dv">300</span>); v_1e4 <span class="ot">&lt;-</span> <span class="fu">se_of_n</span>(<span class="fl">1e4</span>)<span class="sc">^</span><span class="dv">2</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="fu">sqrt</span>(w_grid), <span class="fu">log_abf</span>(<span class="dv">5</span> <span class="sc">*</span> <span class="fu">sqrt</span>(v_1e4), <span class="fu">sqrt</span>(v_1e4), w_grid) <span class="sc">/</span> <span class="fu">log</span>(<span class="dv">10</span>), <span class="at">type =</span> <span class="st">"l"</span>, <span class="at">log =</span> <span class="st">"x"</span>, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#1a6e3c"</span>,</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"z = 5, n = 10,000 에서 W의 영향"</span>, <span class="at">xlab =</span> <span class="st">"사전 표준편차 sqrt(W) (로그 축)"</span>, <span class="at">ylab =</span> <span class="st">"log10 ABF"</span>)</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="fu">abline</span>(<span class="at">v =</span> <span class="fu">c</span>(<span class="fl">0.15</span>, <span class="fu">sqrt</span>(v_1e4 <span class="sc">*</span> (<span class="dv">5</span><span class="sc">^</span><span class="dv">2</span> <span class="sc">-</span> <span class="dv">1</span>))), <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#c0392b"</span>, <span class="st">"grey30"</span>), <span class="at">lty =</span> <span class="dv">2</span>)</span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"bottomright"</span>, <span class="fu">c</span>(<span class="st">"W = 0.15^2"</span>, <span class="st">"W* = V(z^2 - 1)"</span>), <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#c0392b"</span>, <span class="st">"grey30"</span>), <span class="at">lty =</span> <span class="dv">2</span>, <span class="at">bty =</span> <span class="st">"n"</span>, <span class="at">cex =</span> <span class="fl">0.8</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="09_finemapping_files/figure-html/abf-demo-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>표의 가운데 열(<span class="math inline">\(W=0.15^2\)</span>)을 보면 같은 <span class="math inline">\(z=5\)</span>라도 <span class="math inline">\(n\)</span>이 10배 커질 때마다 <span class="math inline">\(\log_{10}\text{ABF}\)</span>가 약 0.5씩(4.38 → 3.93 → 3.44) 줄어듭니다. 유의수준 <span class="math inline">\(p=5\times10^{-8}\)</span>에서도 마찬가지입니다. 반대로 <span class="math inline">\(\sqrt W = 0.01\)</span>처럼 <span class="math inline">\(W\)</span>가 <span class="math inline">\(V\)</span>보다 작으면 관측된 큰 효과를 설명하지 못해 <span class="math inline">\(n=10^4\)</span>에서 1.53까지 떨어집니다. 오른쪽 그림처럼 ABF는 <span class="math inline">\(W\)</span>가 너무 작아도, 너무 커도 작아지며, 너무 클 때 줄어드는 것은 <a href="../chapters/07_hierarchical_modelcomp.html">W7</a>의 Lindley 역설과 같은 현상입니다. p-value는 <span class="math inline">\(W\)</span>도 <span class="math inline">\(n\)</span>도 묻지 않으므로 이런 차이를 담지 못합니다.</p>
+</section>
+<section id="단일-인과-가정-pip와-신용집합" class="level2">
+<h2 class="anchored" data-anchor-id="단일-인과-가정-pip와-신용집합">단일 인과 가정: PIP와 신용집합</h2>
+<p>이제 좌위 안에 인과 변이가 <strong>정확히 하나</strong> 있고, 어느 SNP든 인과일 사전확률이 <span class="math inline">\(1/p\)</span>로 같다고 가정합니다. <a href="../chapters/08_bayesian_regression.html">W8</a>에서 예고한 spike-and-slab 사전분포의 가장 단순한 형태로, 0이 아닌 계수가 정확히 하나이고 그 크기는 slab <span class="math inline">\(\mathcal{N}(0, W)\)</span>에서, 나머지 계수는 spike(정확히 0)에서 옵니다. “SNP <span class="math inline">\(j\)</span>가 인과”라는 가설 아래 형질은 <span class="math inline">\(x_j\)</span> 하나로 설명되므로 이 가설과 귀무가설의 베이즈 인자가 곧 <span class="math inline">\(\text{ABF}_j\)</span>입니다. 베이즈 정리를 쓰면 <strong>사후포함확률(posterior inclusion probability, PIP)</strong>이 바로 나옵니다. <strong>95% 신용집합(credible set)</strong>은 PIP가 큰 순서로 SNP를 더해 누적합이 0.95를 처음 넘는 집합입니다(Maller et al.&nbsp;2012). 모형 가정이 맞다면 이 집합이 인과 변이를 담을 사후확률이 95% 이상입니다.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-2-contents" aria-controls="callout-2" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+수식으로 보기: 단일 인과 PIP
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-2" class="callout-2-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p><span class="math display">\[
+\text{PIP}_j = \Pr(\text{SNP } j \text{ 인과} \mid \text{데이터}) = \frac{\pi_j\,\text{ABF}_j}{\sum_{k=1}^{p}\pi_k\,\text{ABF}_k} = \frac{\text{ABF}_j}{\sum_{k}\text{ABF}_k} \quad (\pi_j = 1/p)
+\]</span> 분모의 합은 로그 공간에서 <code>log_sum_exp</code>로 계산합니다. 인과가 하나라는 가정 덕분에 필요한 것은 SNP별 <span class="math inline">\(\hat\beta_j\)</span>, <span class="math inline">\(\text{se}_j\)</span>뿐이고 <strong>LD 행렬이 필요 없습니다</strong>. 요약통계만 공개된 GWAS에서 이 방법이 널리 쓰이는 이유입니다.</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Tip
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>PIP는 좌위 전체의 증거를 SNP들에게 <strong>나눠 주는</strong> 확률입니다. LD로 묶인 이웃이 거의 같은 증거를 가지면 몫을 나눠 가져 모두 작아집니다. 그래서 리드 SNP가 <span class="math inline">\(p=10^{-12}\)</span>여도 PIP는 0.3일 수 있고, 반대로 <span class="math inline">\(p=10^{-9}\)</span>인 SNP가 이웃이 없으면 PIP 0.99일 수 있습니다. 불확실성은 PIP 하나가 아니라 신용집합의 크기로 읽습니다.</p>
+</div>
+</div>
+<p>같은 인과 효과, 같은 난수 시드로 LD만 약하게(<span class="math inline">\(\rho = 0.9\)</span>) 바꾼 좌위를 하나 더 만들어 비교합니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>pip_single <span class="ot">&lt;-</span> <span class="cf">function</span>(beta_hat, se, <span class="at">W =</span> <span class="fl">0.15</span><span class="sc">^</span><span class="dv">2</span>) {             <span class="co"># 단일 인과 가정, 균등 사전확률</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  la <span class="ot">&lt;-</span> <span class="fu">log_abf</span>(beta_hat, se, W); <span class="fu">exp</span>(la <span class="sc">-</span> <span class="fu">log_sum_exp</span>(la))</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>credible_set <span class="ot">&lt;-</span> <span class="cf">function</span>(pip, <span class="at">coverage =</span> <span class="fl">0.95</span>) {                 <span class="co"># PIP 내림차순 누적합이 coverage를 넘는 최소 집합</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  o <span class="ot">&lt;-</span> <span class="fu">order</span>(pip, <span class="at">decreasing =</span> <span class="cn">TRUE</span>); o[<span class="fu">seq_len</span>(<span class="fu">which</span>(<span class="fu">cumsum</span>(pip[o]) <span class="sc">&gt;=</span> coverage)[<span class="dv">1</span>])]</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>loc_w <span class="ot">&lt;-</span> <span class="fu">make_locus</span>(<span class="at">rho =</span> <span class="fl">0.9</span>, <span class="at">seed =</span> <span class="dv">14</span>)                         <span class="co"># 같은 시드, LD만 약하게</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>summ <span class="ot">&lt;-</span> <span class="cf">function</span>(loc) {</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>  pip <span class="ot">&lt;-</span> <span class="fu">pip_single</span>(loc<span class="sc">$</span>ss<span class="sc">$</span>beta_hat, loc<span class="sc">$</span>ss<span class="sc">$</span>se); cs <span class="ot">&lt;-</span> <span class="fu">credible_set</span>(pip)</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">c</span>(<span class="at">lead =</span> <span class="fu">which.max</span>(<span class="fu">abs</span>(loc<span class="sc">$</span>ss<span class="sc">$</span>z)), <span class="at">lead_p =</span> <span class="fu">min</span>(loc<span class="sc">$</span>ss<span class="sc">$</span>p), <span class="at">n_sig =</span> <span class="fu">sum</span>(loc<span class="sc">$</span>ss<span class="sc">$</span>p <span class="sc">&lt;</span> <span class="fl">5e-8</span>),</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">pip_causal =</span> pip[causal], <span class="at">cs_size =</span> <span class="fu">length</span>(cs), <span class="at">causal_in_cs =</span> causal <span class="sc">%in%</span> cs)</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">signif</span>(<span class="fu">rbind</span>(<span class="st">"약한 LD (rho = 0.9)"</span> <span class="ot">=</span> <span class="fu">summ</span>(loc_w), <span class="st">"강한 LD (rho = 0.998)"</span> <span class="ot">=</span> <span class="fu">summ</span>(loc_s)), <span class="dv">3</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>                      lead   lead_p n_sig pip_causal cs_size causal_in_cs
+약한 LD (rho = 0.9)     12 1.16e-09     1      0.998       1            1
+강한 LD (rho = 0.998)   12 1.25e-12    28      0.619       9            1</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>pip_s <span class="ot">&lt;-</span> <span class="fu">pip_single</span>(ss<span class="sc">$</span>beta_hat, ss<span class="sc">$</span>se); <span class="fu">cat</span>(<span class="st">"강한 LD의 95% 신용집합:"</span>, <span class="fu">sort</span>(<span class="fu">credible_set</span>(pip_s)), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>강한 LD의 95% 신용집합: 9 10 11 12 13 44 45 46 48 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a>plot_locus <span class="ot">&lt;-</span> <span class="cf">function</span>(loc, title) {                             <span class="co"># 위: -log10 p, 아래: PIP (파랑 = 신용집합)</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>  pip <span class="ot">&lt;-</span> <span class="fu">pip_single</span>(loc<span class="sc">$</span>ss<span class="sc">$</span>beta_hat, loc<span class="sc">$</span>ss<span class="sc">$</span>se); cs <span class="ot">&lt;-</span> <span class="fu">credible_set</span>(pip); col <span class="ot">&lt;-</span> <span class="fu">ifelse</span>(<span class="dv">1</span><span class="sc">:</span>p <span class="sc">%in%</span> cs, <span class="st">"#2c7fb8"</span>, <span class="st">"grey60"</span>)</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plot</span>(<span class="dv">1</span><span class="sc">:</span>p, <span class="sc">-</span><span class="fu">log10</span>(loc<span class="sc">$</span>ss<span class="sc">$</span>p), <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> col, <span class="at">main =</span> <span class="fu">paste0</span>(title, <span class="st">": -log10 p"</span>), <span class="at">xlab =</span> <span class="st">"SNP"</span>, <span class="at">ylab =</span> <span class="st">"-log10 p"</span>)</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">abline</span>(<span class="at">h =</span> <span class="sc">-</span><span class="fu">log10</span>(<span class="fl">5e-8</span>), <span class="at">lty =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"grey30"</span>); <span class="fu">points</span>(causal, <span class="sc">-</span><span class="fu">log10</span>(loc<span class="sc">$</span>ss<span class="sc">$</span>p[causal]), <span class="at">cex =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#c0392b"</span>)</span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">plot</span>(<span class="dv">1</span><span class="sc">:</span>p, pip, <span class="at">type =</span> <span class="st">"h"</span>, <span class="at">lwd =</span> <span class="dv">3</span>, <span class="at">col =</span> col, <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>), <span class="at">xlab =</span> <span class="st">"SNP"</span>, <span class="at">ylab =</span> <span class="st">"PIP"</span>,</span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">main =</span> <span class="fu">sprintf</span>(<span class="st">"%s: PIP (95%% 신용집합 %d개)"</span>, title, <span class="fu">length</span>(cs))); <span class="fu">points</span>(causal, pip[causal], <span class="at">cex =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#c0392b"</span>)</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfcol =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">2</span>), <span class="at">mar =</span> <span class="fu">c</span>(<span class="dv">4</span>, <span class="dv">4</span>, <span class="fl">2.5</span>, <span class="dv">1</span>)); <span class="fu">plot_locus</span>(loc_w, <span class="st">"약한 LD"</span>); <span class="fu">plot_locus</span>(loc_s, <span class="st">"강한 LD"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="09_finemapping_files/figure-html/pip-ld-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>빨간 원이 인과 SNP입니다. 약한 LD에서는 유의한 SNP가 하나뿐이고 인과 SNP의 PIP가 0.998, 신용집합이 SNP 하나입니다. 강한 LD에서는 리드 SNP가 인과 SNP이고 <span class="math inline">\(p\)</span>도 더 작은데도 PIP는 0.62에 그치고, 신용집합에 SNP 9개가 들어갑니다. 그중 44, 45, 46, 48번은 위치로는 멀지만 LD로 묶인 SNP입니다. 데이터가 인과 SNP와 이웃을 구분할 정보가 적을수록 신용집합이 커집니다. 이것이 fine-mapping의 정직한 답입니다.</p>
+</section>
+<section id="함정-인과-변이가-둘이면" class="level2">
+<h2 class="anchored" data-anchor-id="함정-인과-변이가-둘이면">함정: 인과 변이가 둘이면</h2>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Warning
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>단일 인과 가정의 PIP는 합이 1이라 <strong>신호 하나만</strong> 담을 수 있습니다. 인과 변이가 둘이면 약한 쪽은 PIP를 거의 받지 못해 두 번째 신호를 놓칩니다. 더 나쁜 상황도 있습니다. 두 인과 변이 모두와 LD인 <strong>태그(tag) SNP</strong>가 있으면 그 SNP의 주변 연관이 두 효과를 합친 만큼 커져 어느 인과 변이보다 강해집니다. 그러면 PIP가 인과가 아닌 태그에 몰리고, 95% 신용집합이 인과 변이를 하나도 담지 않을 수 있습니다.</p>
+</div>
+</div>
+<p>오래된 반수체에 대립유전자 T가 먼저 생기고, 그 위에서 인과 대립유전자 A(22번)와 B(40번)가 따로 생겼다고 합시다. 그러면 A나 B를 가진 반수체는 모두 T도 가지고, A와 B 없이 T만 가진 반수체도 일부 있습니다. 이런 <strong>가상의 데이터</strong>를 만들고 A와 B에 같은 효과를 줍니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>snp_a <span class="ot">&lt;-</span> <span class="dv">22</span>; snp_b <span class="ot">&lt;-</span> <span class="dv">40</span>; snp_t <span class="ot">&lt;-</span> <span class="dv">31</span>                            <span class="co"># 인과 A, 인과 B, 태그 T</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>make_trap <span class="ot">&lt;-</span> <span class="cf">function</span>(seed, <span class="at">b =</span> <span class="fl">0.3</span>, <span class="at">extra =</span> <span class="fl">0.1</span>) {</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">set.seed</span>(seed); h <span class="ot">&lt;-</span> <span class="fu">sim_hap</span>(<span class="dv">2</span> <span class="sc">*</span> n, <span class="fu">ar1</span>(p, <span class="fl">0.9</span>), af)</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>  h[, snp_t] <span class="ot">&lt;-</span> <span class="fu">pmax</span>(h[, snp_a], h[, snp_b], <span class="fu">rbinom</span>(<span class="dv">2</span> <span class="sc">*</span> n, <span class="dv">1</span>, extra))  <span class="co"># A나 B를 가진 반수체에는 T가 항상 있음</span></span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a>  X <span class="ot">&lt;-</span> <span class="fu">to_geno</span>(h); y <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>(<span class="fu">scale</span>(b <span class="sc">*</span> X[, snp_a] <span class="sc">+</span> b <span class="sc">*</span> X[, snp_b] <span class="sc">+</span> <span class="fu">rnorm</span>(n)))</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">X =</span> X, <span class="at">y =</span> y, <span class="at">ss =</span> <span class="fu">sumstats</span>(X, y))</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>trap <span class="ot">&lt;-</span> <span class="fu">make_trap</span>(<span class="at">seed =</span> <span class="dv">304</span>); ss2 <span class="ot">&lt;-</span> trap<span class="sc">$</span>ss; r2 <span class="ot">&lt;-</span> <span class="fu">cor</span>(trap<span class="sc">$</span>X)</span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a>pip_abf <span class="ot">&lt;-</span> <span class="fu">pip_single</span>(ss2<span class="sc">$</span>beta_hat, ss2<span class="sc">$</span>se); cs_abf <span class="ot">&lt;-</span> <span class="fu">credible_set</span>(pip_abf)</span>
+<span id="cb17-10"><a href="#cb17-10" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">"r(T,A) = %.2f, r(T,B) = %.2f, r(A,B) = %.2f</span><span class="sc">\n</span><span class="st">"</span>, r2[snp_t, snp_a], r2[snp_t, snp_b], r2[snp_a, snp_b]))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>r(T,A) = 0.58, r(T,B) = 0.61, r(A,B) = 0.06</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>out <span class="ot">&lt;-</span> <span class="fu">rbind</span>(<span class="at">z =</span> ss2<span class="sc">$</span>z, <span class="at">PIP =</span> pip_abf)[, <span class="fu">c</span>(snp_a, snp_b, snp_t)]; <span class="fu">colnames</span>(out) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"A(22)"</span>, <span class="st">"B(40)"</span>, <span class="st">"T(31)"</span>); <span class="fu">print</span>(<span class="fu">round</span>(out, <span class="dv">3</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>    A(22) B(40) T(31)
+z   7.316 7.060 7.828
+PIP 0.017 0.003 0.979</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb21"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"단일 인과 95% 신용집합:"</span>, cs_abf, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>단일 인과 95% 신용집합: 31 </code></pre>
+</div>
+</div>
+<p>T는 A, B와 각각 <span class="math inline">\(r \approx 0.6\)</span> 정도로만 묶여 있지만 두 효과를 함께 싣고 있어 <span class="math inline">\(z\)</span>가 7.83으로 A(7.32)와 B(7.06)보다 큽니다. 단일 인과 모형은 PIP 0.979를 T에 주고, 신용집합은 T 하나입니다. 인과 SNP 둘이 모두 빠졌습니다. p-value가 아니라 PIP를 써도 <strong>모형 가정이 틀리면 확률도 틀립니다.</strong></p>
+</section>
+<section id="susie-단일효과의-합" class="level2">
+<h2 class="anchored" data-anchor-id="susie-단일효과의-합">SuSiE: 단일효과의 합</h2>
+<p><strong>SuSiE</strong>(Sum of Single Effects; Wang, Sarkar, Carbonetto &amp; Stephens 2020)는 단일 인과 모형을 버리지 않고 <strong>여러 개 쌓습니다</strong>. 회귀계수 벡터를 <span class="math inline">\(L\)</span>개의 <strong>단일효과(single effect)</strong> <span class="math inline">\(b_l\)</span>의 합으로 쓰고, 각 <span class="math inline">\(b_l\)</span>은 원소 하나만 0이 아닙니다. 각 단일효과는 앞 절의 단일 인과 fine-mapping을 하나씩 맡으며, 이것을 <strong>단일효과회귀(single effect regression, SER)</strong>라 합니다. 효과 <span class="math inline">\(l\)</span>을 적합할 때는 나머지 효과들의 현재 적합값을 <span class="math inline">\(y\)</span>에서 뺀 잔차를 씁니다. 효과 1부터 <span class="math inline">\(L\)</span>까지 돌아가며 이를 반복하는 것이 <strong>반복 베이즈 단계적 적합(iterative Bayesian stepwise selection, IBSS)</strong>입니다. 전진 단계적 선택과 비슷하지만 앞서 고른 효과를 나중에 다시 고칠 수 있고, 각 효과가 SNP 하나가 아니라 SNP 위의 확률분포 <span class="math inline">\(\alpha_l\)</span>을 갖습니다. 그래서 효과마다 신용집합이 하나씩 나옵니다.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-5-contents" aria-controls="callout-5" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+수식으로 보기: SuSiE 모형, SER, IBSS
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-5" class="callout-5-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p><span class="math display">\[
+y = \sum_{l=1}^{L} X b_l + e,\quad e \sim \mathcal{N}(0, \sigma^2 I_n),\qquad b_l = \gamma_l\,\beta_l,\quad \gamma_l \sim \text{Mult}(1, \pi),\quad \beta_l \sim \mathcal{N}(0, \sigma_{0l}^2)
+\]</span> <strong>SER.</strong> 잔차 <span class="math inline">\(r\)</span>에 대해 <span class="math inline">\(\hat\beta_j = x_j^\top r / x_j^\top x_j\)</span>, <span class="math inline">\(s_j^2 = \sigma^2 / x_j^\top x_j\)</span>이고 SNP별 베이즈 인자는 Wakefield ABF에서 <span class="math inline">\(V = s_j^2\)</span>, <span class="math inline">\(W = \sigma_0^2\)</span>로 둔 것과 <strong>정확히 같습니다</strong>. 그 다음 <span class="math display">\[
+\alpha_j = \frac{\pi_j \text{BF}_j}{\sum_k \pi_k \text{BF}_k},\qquad v_j = \left(\frac{1}{\sigma_0^2} + \frac{x_j^\top x_j}{\sigma^2}\right)^{-1},\qquad \mu_j = v_j\,\frac{x_j^\top r}{\sigma^2}
+\]</span> 이고 <span class="math inline">\(\mu_j\)</span>, <span class="math inline">\(v_j\)</span>는 SNP <span class="math inline">\(j\)</span>가 그 효과를 맡을 때 효과 크기의 사후평균과 사후분산입니다. 효과 <span class="math inline">\(l\)</span>의 사후평균 벡터는 <span class="math inline">\(\bar b_l = \alpha_l \circ \mu_l\)</span>입니다.</p>
+<p><strong>사전분산.</strong> <span class="math inline">\(\sigma_{0l}^2\)</span>는 <span class="math inline">\(\log\sum_j \pi_j \text{BF}_j(\sigma_0^2)\)</span>를 최대화해 정하고, 0으로 둘 때보다 나은 게 없으면 0으로 둡니다. 쓰이지 않는 효과는 이렇게 저절로 꺼지므로 <span class="math inline">\(L\)</span>은 인과 변이 수의 <strong>상한</strong>으로 넉넉히 잡으면 됩니다. <strong>잔차분산</strong>은 <span class="math inline">\(\sigma^2 = \mathrm{E}\lVert y - \sum_l X b_l\rVert^2 / n\)</span>으로 갱신합니다. IBSS는 이 모형의 변분 근사를 좌표 상승(coordinate ascent)으로 최적화하는 것과 같습니다(Wang et al.&nbsp;2020).</p>
+<p><strong>요약.</strong> SNP <span class="math inline">\(j\)</span>의 전체 PIP는 적어도 한 효과가 <span class="math inline">\(j\)</span>를 고를 확률 <span class="math inline">\(\text{PIP}_j = 1 - \prod_l (1 - \alpha_{lj})\)</span>입니다. 효과 <span class="math inline">\(l\)</span>의 95% 신용집합은 <span class="math inline">\(\alpha_l\)</span>로 앞 절과 같이 만들고, 집합 안 SNP 쌍의 <span class="math inline">\(|r|\)</span> 최솟값인 <strong>순도(purity)</strong>가 0.5 미만이면 버립니다(susieR의 <code>min_abs_corr = 0.5</code>). 순도가 낮은 집합은 서로 무관한 SNP를 넓게 담은 집합이라 한 신호를 가리킨다고 보기 어렵습니다.</p>
+</div>
+</div>
+</div>
+</section>
+<section id="실습-base-r로-직접-구현" class="level2">
+<h2 class="anchored" data-anchor-id="실습-base-r로-직접-구현">실습: base R로 직접 구현</h2>
+<section id="단일효과회귀와-ibss" class="level3">
+<h3 class="anchored" data-anchor-id="단일효과회귀와-ibss">(1) 단일효과회귀와 IBSS</h3>
+<p><code>ser</code>는 위 수식을 그대로 옮긴 것입니다. <code>log_abf</code>를 그대로 재사용하는 점을 보십시오. <code>susie_ibss</code>는 효과마다 적합값 <span class="math inline">\(X\bar b_l\)</span>을 열로 저장해 두고, 효과 <span class="math inline">\(l\)</span> 차례에 나머지 열의 합을 <span class="math inline">\(y\)</span>에서 빼서 잔차를 만듭니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>ser <span class="ot">&lt;-</span> <span class="cf">function</span>(X, r, xtx, s2, <span class="at">prior_var =</span> <span class="cn">NULL</span>, <span class="at">null_thr =</span> <span class="fl">0.1</span>) {   <span class="co"># 단일효과회귀 (X, r 는 중심화됨)</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>  p <span class="ot">&lt;-</span> <span class="fu">ncol</span>(X); log_pi <span class="ot">&lt;-</span> <span class="fu">rep</span>(<span class="sc">-</span><span class="fu">log</span>(p), p)                              <span class="co"># 균등 사전확률 pi_j = 1/p</span></span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>  xtr <span class="ot">&lt;-</span> <span class="fu">drop</span>(<span class="fu">crossprod</span>(X, r)); bhat <span class="ot">&lt;-</span> xtr <span class="sc">/</span> xtx; shat <span class="ot">&lt;-</span> <span class="fu">sqrt</span>(s2 <span class="sc">/</span> xtx)</span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(prior_var)) {                                            <span class="co"># 사전분산 추정: log(sum pi_j BF_j) 최대화</span></span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>    obj <span class="ot">&lt;-</span> <span class="cf">function</span>(lv) <span class="fu">log_sum_exp</span>(log_pi <span class="sc">+</span> <span class="fu">log_abf</span>(bhat, shat, <span class="fu">exp</span>(lv)))</span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>    opt <span class="ot">&lt;-</span> <span class="fu">optimize</span>(obj, <span class="fu">c</span>(<span class="sc">-</span><span class="dv">15</span>, <span class="dv">2</span>), <span class="at">maximum =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>    s0 <span class="ot">&lt;-</span> <span class="cf">if</span> (opt<span class="sc">$</span>objective <span class="sc">&gt;</span> null_thr) <span class="fu">exp</span>(opt<span class="sc">$</span>maximum) <span class="cf">else</span> <span class="dv">0</span>        <span class="co"># 개선이 작으면 효과를 끔</span></span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>  } <span class="cf">else</span> s0 <span class="ot">&lt;-</span> prior_var</span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (s0 <span class="sc">==</span> <span class="dv">0</span>) <span class="fu">return</span>(<span class="fu">list</span>(<span class="at">alpha =</span> <span class="fu">exp</span>(log_pi), <span class="at">mu =</span> <span class="fu">rep</span>(<span class="dv">0</span>, p), <span class="at">mu2 =</span> <span class="fu">rep</span>(<span class="dv">0</span>, p), <span class="at">s0 =</span> <span class="dv">0</span>))</span>
+<span id="cb23-10"><a href="#cb23-10" aria-hidden="true" tabindex="-1"></a>  la <span class="ot">&lt;-</span> log_pi <span class="sc">+</span> <span class="fu">log_abf</span>(bhat, shat, s0); alpha <span class="ot">&lt;-</span> <span class="fu">exp</span>(la <span class="sc">-</span> <span class="fu">log_sum_exp</span>(la))</span>
+<span id="cb23-11"><a href="#cb23-11" aria-hidden="true" tabindex="-1"></a>  post_var <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">/</span> (<span class="dv">1</span> <span class="sc">/</span> s0 <span class="sc">+</span> xtx <span class="sc">/</span> s2); mu <span class="ot">&lt;-</span> post_var <span class="sc">*</span> xtr <span class="sc">/</span> s2      <span class="co"># SNP j가 맡을 때의 사후분산·사후평균</span></span>
+<span id="cb23-12"><a href="#cb23-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">alpha =</span> alpha, <span class="at">mu =</span> mu, <span class="at">mu2 =</span> post_var <span class="sc">+</span> mu<span class="sc">^</span><span class="dv">2</span>, <span class="at">s0 =</span> s0)</span>
+<span id="cb23-13"><a href="#cb23-13" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb23-14"><a href="#cb23-14" aria-hidden="true" tabindex="-1"></a>susie_ibss <span class="ot">&lt;-</span> <span class="cf">function</span>(X, y, <span class="at">L =</span> <span class="dv">10</span>, <span class="at">n_iter =</span> <span class="dv">100</span>, <span class="at">prior_var =</span> <span class="cn">NULL</span>, <span class="at">update_s2 =</span> <span class="cn">TRUE</span>, <span class="at">tol =</span> <span class="fl">1e-4</span>, <span class="at">null_thr =</span> <span class="fl">0.1</span>) {</span>
+<span id="cb23-15"><a href="#cb23-15" aria-hidden="true" tabindex="-1"></a>  X <span class="ot">&lt;-</span> <span class="fu">scale</span>(X, <span class="at">scale =</span> <span class="cn">FALSE</span>); y <span class="ot">&lt;-</span> y <span class="sc">-</span> <span class="fu">mean</span>(y); n <span class="ot">&lt;-</span> <span class="fu">nrow</span>(X); p <span class="ot">&lt;-</span> <span class="fu">ncol</span>(X); xtx <span class="ot">&lt;-</span> <span class="fu">colSums</span>(X<span class="sc">^</span><span class="dv">2</span>)</span>
+<span id="cb23-16"><a href="#cb23-16" aria-hidden="true" tabindex="-1"></a>  alpha <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="dv">1</span> <span class="sc">/</span> p, L, p); mu <span class="ot">&lt;-</span> mu2 <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="dv">0</span>, L, p); s0 <span class="ot">&lt;-</span> <span class="fu">rep</span>(<span class="dv">0</span>, L)</span>
+<span id="cb23-17"><a href="#cb23-17" aria-hidden="true" tabindex="-1"></a>  s2 <span class="ot">&lt;-</span> <span class="fu">var</span>(y); fit_l <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="dv">0</span>, n, L)                               <span class="co"># fit_l[, l] = X %*% (alpha_l * mu_l)</span></span>
+<span id="cb23-18"><a href="#cb23-18" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (it <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>n_iter) {</span>
+<span id="cb23-19"><a href="#cb23-19" aria-hidden="true" tabindex="-1"></a>    alpha_old <span class="ot">&lt;-</span> alpha</span>
+<span id="cb23-20"><a href="#cb23-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> (l <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>L) {</span>
+<span id="cb23-21"><a href="#cb23-21" aria-hidden="true" tabindex="-1"></a>      r <span class="ot">&lt;-</span> y <span class="sc">-</span> <span class="fu">rowSums</span>(fit_l[, <span class="sc">-</span>l, <span class="at">drop =</span> <span class="cn">FALSE</span>])                      <span class="co"># 효과 l을 뺀 나머지로 만든 잔차</span></span>
+<span id="cb23-22"><a href="#cb23-22" aria-hidden="true" tabindex="-1"></a>      f <span class="ot">&lt;-</span> <span class="fu">ser</span>(X, r, xtx, s2, prior_var, null_thr)</span>
+<span id="cb23-23"><a href="#cb23-23" aria-hidden="true" tabindex="-1"></a>      alpha[l, ] <span class="ot">&lt;-</span> f<span class="sc">$</span>alpha; mu[l, ] <span class="ot">&lt;-</span> f<span class="sc">$</span>mu; mu2[l, ] <span class="ot">&lt;-</span> f<span class="sc">$</span>mu2; s0[l] <span class="ot">&lt;-</span> f<span class="sc">$</span>s0</span>
+<span id="cb23-24"><a href="#cb23-24" aria-hidden="true" tabindex="-1"></a>      fit_l[, l] <span class="ot">&lt;-</span> X <span class="sc">%*%</span> (f<span class="sc">$</span>alpha <span class="sc">*</span> f<span class="sc">$</span>mu)</span>
+<span id="cb23-25"><a href="#cb23-25" aria-hidden="true" tabindex="-1"></a>    }</span>
+<span id="cb23-26"><a href="#cb23-26" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (update_s2)                                                     <span class="co"># 기대 잔차제곱합 / n</span></span>
+<span id="cb23-27"><a href="#cb23-27" aria-hidden="true" tabindex="-1"></a>      s2 <span class="ot">&lt;-</span> (<span class="fu">sum</span>((y <span class="sc">-</span> <span class="fu">rowSums</span>(fit_l))<span class="sc">^</span><span class="dv">2</span>) <span class="sc">-</span> <span class="fu">sum</span>(fit_l<span class="sc">^</span><span class="dv">2</span>) <span class="sc">+</span> <span class="fu">sum</span>(alpha <span class="sc">*</span> mu2 <span class="sc">*</span> <span class="fu">rep</span>(xtx, <span class="at">each =</span> L))) <span class="sc">/</span> n</span>
+<span id="cb23-28"><a href="#cb23-28" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (<span class="fu">max</span>(<span class="fu">abs</span>(alpha <span class="sc">-</span> alpha_old)) <span class="sc">&lt;</span> tol) <span class="cf">break</span></span>
+<span id="cb23-29"><a href="#cb23-29" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb23-30"><a href="#cb23-30" aria-hidden="true" tabindex="-1"></a>  keep <span class="ot">&lt;-</span> <span class="fu">which</span>(s0 <span class="sc">&gt;</span> <span class="fl">1e-9</span>)                                             <span class="co"># 꺼진 효과는 PIP 계산에서 제외</span></span>
+<span id="cb23-31"><a href="#cb23-31" aria-hidden="true" tabindex="-1"></a>  pip <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">length</span>(keep)) <span class="dv">1</span> <span class="sc">-</span> <span class="fu">apply</span>(<span class="dv">1</span> <span class="sc">-</span> alpha[keep, , <span class="at">drop =</span> <span class="cn">FALSE</span>], <span class="dv">2</span>, prod) <span class="cf">else</span> <span class="fu">rep</span>(<span class="dv">0</span>, p)</span>
+<span id="cb23-32"><a href="#cb23-32" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">alpha =</span> alpha, <span class="at">mu =</span> mu, <span class="at">prior_var =</span> s0, <span class="at">sigma2 =</span> s2, <span class="at">n_iter =</span> it, <span class="at">pip =</span> pip)</span>
+<span id="cb23-33"><a href="#cb23-33" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb23-34"><a href="#cb23-34" aria-hidden="true" tabindex="-1"></a>susie_cs <span class="ot">&lt;-</span> <span class="cf">function</span>(fit, X, <span class="at">coverage =</span> <span class="fl">0.95</span>, <span class="at">min_abs_corr =</span> <span class="fl">0.5</span>) {    <span class="co"># 효과별 신용집합 + 순도 필터</span></span>
+<span id="cb23-35"><a href="#cb23-35" aria-hidden="true" tabindex="-1"></a>  r_abs <span class="ot">&lt;-</span> <span class="fu">abs</span>(<span class="fu">cor</span>(X)); out <span class="ot">&lt;-</span> <span class="fu">list</span>()</span>
+<span id="cb23-36"><a href="#cb23-36" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (l <span class="cf">in</span> <span class="fu">which</span>(fit<span class="sc">$</span>prior_var <span class="sc">&gt;</span> <span class="fl">1e-9</span>)) {</span>
+<span id="cb23-37"><a href="#cb23-37" aria-hidden="true" tabindex="-1"></a>    cs <span class="ot">&lt;-</span> <span class="fu">sort</span>(<span class="fu">credible_set</span>(fit<span class="sc">$</span>alpha[l, ], coverage)); purity <span class="ot">&lt;-</span> <span class="fu">min</span>(r_abs[cs, cs])</span>
+<span id="cb23-38"><a href="#cb23-38" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> (purity <span class="sc">&gt;=</span> min_abs_corr) out[[<span class="fu">length</span>(out) <span class="sc">+</span> <span class="dv">1</span>]] <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">effect =</span> l, <span class="at">cs =</span> cs, <span class="at">purity =</span> purity)</span>
+<span id="cb23-39"><a href="#cb23-39" aria-hidden="true" tabindex="-1"></a>  }</span>
+<span id="cb23-40"><a href="#cb23-40" aria-hidden="true" tabindex="-1"></a>  out[<span class="sc">!</span><span class="fu">duplicated</span>(<span class="fu">lapply</span>(out, <span class="cf">function</span>(o) o<span class="sc">$</span>cs))]                      <span class="co"># 같은 집합을 두 효과가 잡으면 하나만</span></span>
+<span id="cb23-41"><a href="#cb23-41" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>susieR과 다른 선택은 다음과 같습니다. (1) <span class="math inline">\(X\)</span>를 중심화만 하고 표준화하지 않아 사전분산이 대립유전자당 효과 척도에 걸립니다(susieR 기본은 <code>standardize = TRUE</code>). (2) 수렴은 <span class="math inline">\(\alpha\)</span>의 최대 변화가 <span class="math inline">\(10^{-4}\)</span> 미만일 때로 판정합니다(susieR은 변분 하한 ELBO의 변화로 판정). (3) 사전분산을 켜는 문턱을 로그 주변가능도 개선 0.1로 두었습니다. susieR의 <code>check_null_threshold</code> 인자와 같은 역할이며 그 기본값은 0입니다. 문턱을 0으로 두면 SNP가 60개뿐인 이 좌위에서는 개선이 0.01도 안 되는 거의 꺼진 효과가 여럿 남고, 각각 <span class="math inline">\(\alpha\)</span>가 60개 SNP에 고르게 퍼져 있어 모든 SNP의 PIP를 조금씩 올립니다(아래 (2)의 출력). SNP가 수천 개인 실제 좌위에서는 <span class="math inline">\(1/p\)</span>이 작아 거의 드러나지 않습니다. 잔차분산 갱신은 susieR 기본(<code>estimate_residual_variance = TRUE</code>)과 같은 식입니다.</p>
+</section>
+<section id="태그-snp-좌위에-적용" class="level3">
+<h3 class="anchored" data-anchor-id="태그-snp-좌위에-적용">(2) 태그 SNP 좌위에 적용</h3>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb24"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">susie_ibss</span>(trap<span class="sc">$</span>X, trap<span class="sc">$</span>y, <span class="at">L =</span> <span class="dv">10</span>); cs_su <span class="ot">&lt;-</span> <span class="fu">susie_cs</span>(fit, trap<span class="sc">$</span>X)</span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"반복"</span>, fit<span class="sc">$</span>n_iter, <span class="st">"회, sigma^2 ="</span>, <span class="fu">round</span>(fit<span class="sc">$</span>sigma2, <span class="dv">3</span>), <span class="st">"| 추정된 사전분산:"</span>, <span class="fu">signif</span>(fit<span class="sc">$</span>prior_var, <span class="dv">2</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>반복 8 회, sigma^2 = 0.938 | 추정된 사전분산: 0.072 0.084 0 0 0 0 0 0 0 0 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb26"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (o <span class="cf">in</span> cs_su) <span class="fu">cat</span>(<span class="fu">sprintf</span>(<span class="st">"효과 %d: 95%% 신용집합 {%s}, 순도 %.2f</span><span class="sc">\n</span><span class="st">"</span>, o<span class="sc">$</span>effect, <span class="fu">paste</span>(o<span class="sc">$</span>cs, <span class="at">collapse =</span> <span class="st">", "</span>), o<span class="sc">$</span>purity))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>효과 1: 95% 신용집합 {40}, 순도 1.00
+효과 2: 95% 신용집합 {22}, 순도 1.00</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb28"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"SuSiE PIP  A, B, T:"</span>, <span class="fu">round</span>(fit<span class="sc">$</span>pip[<span class="fu">c</span>(snp_a, snp_b, snp_t)], <span class="dv">3</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>SuSiE PIP  A, B, T: 1 1 0 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb30"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>f_1 <span class="ot">&lt;-</span> <span class="fu">susie_ibss</span>(trap<span class="sc">$</span>X, trap<span class="sc">$</span>y, <span class="at">L =</span> <span class="dv">10</span>, <span class="at">n_iter =</span> <span class="dv">1</span>)                <span class="co"># 첫 반복에서 멈춘 적합</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a>f_0 <span class="ot">&lt;-</span> <span class="fu">susie_ibss</span>(trap<span class="sc">$</span>X, trap<span class="sc">$</span>y, <span class="at">L =</span> <span class="dv">10</span>, <span class="at">null_thr =</span> <span class="dv">0</span>)              <span class="co"># susieR 기본값처럼 문턱 0</span></span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"첫 반복 후 효과 1: SNP"</span>, <span class="fu">which.max</span>(f_1<span class="sc">$</span>alpha[<span class="dv">1</span>, ]), <span class="st">"alpha"</span>, <span class="fu">round</span>(<span class="fu">max</span>(f_1<span class="sc">$</span>alpha[<span class="dv">1</span>, ]), <span class="dv">2</span>),</span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"| 문턱 0: 켜진 효과"</span>, <span class="fu">sum</span>(f_0<span class="sc">$</span>prior_var <span class="sc">&gt;</span> <span class="dv">0</span>), <span class="st">"개, PIP 중앙값"</span>, <span class="fu">round</span>(<span class="fu">median</span>(f_0<span class="sc">$</span>pip), <span class="dv">3</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>첫 반복 후 효과 1: SNP 31 alpha 0.97 | 문턱 0: 켜진 효과 10 개, PIP 중앙값 0.122 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">3</span>, <span class="dv">1</span>), <span class="at">mar =</span> <span class="fu">c</span>(<span class="dv">4</span>, <span class="dv">4</span>, <span class="fl">2.5</span>, <span class="dv">1</span>))</span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>causal_lines <span class="ot">&lt;-</span> <span class="fu">quote</span>(<span class="fu">abline</span>(<span class="at">v =</span> <span class="fu">c</span>(snp_a, snp_b), <span class="at">col =</span> <span class="st">"#c0392b"</span>, <span class="at">lty =</span> <span class="dv">2</span>))   <span class="co"># 인과 SNP 위치 (막대 뒤에 그림)</span></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="dv">1</span><span class="sc">:</span>p, <span class="sc">-</span><span class="fu">log10</span>(ss2<span class="sc">$</span>p), <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> <span class="st">"grey60"</span>, <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">1.1</span> <span class="sc">*</span> <span class="fu">max</span>(<span class="sc">-</span><span class="fu">log10</span>(ss2<span class="sc">$</span>p))), <span class="at">panel.first =</span> <span class="fu">eval</span>(causal_lines),</span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"주변 연관 (-log10 p), 세모 = 태그 T"</span>, <span class="at">xlab =</span> <span class="st">"SNP"</span>, <span class="at">ylab =</span> <span class="st">"-log10 p"</span>); <span class="fu">points</span>(snp_t, <span class="sc">-</span><span class="fu">log10</span>(ss2<span class="sc">$</span>p[snp_t]), <span class="at">pch =</span> <span class="dv">17</span>, <span class="at">col =</span> <span class="st">"#2c7fb8"</span>, <span class="at">cex =</span> <span class="fl">1.6</span>)</span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="dv">1</span><span class="sc">:</span>p, pip_abf, <span class="at">type =</span> <span class="st">"h"</span>, <span class="at">lwd =</span> <span class="dv">3</span>, <span class="at">col =</span> <span class="fu">ifelse</span>(<span class="dv">1</span><span class="sc">:</span>p <span class="sc">%in%</span> cs_abf, <span class="st">"#2c7fb8"</span>, <span class="st">"grey60"</span>), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>), <span class="at">panel.first =</span> <span class="fu">eval</span>(causal_lines),</span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"단일 인과 ABF의 PIP (파랑 = 95% 신용집합)"</span>, <span class="at">xlab =</span> <span class="st">"SNP"</span>, <span class="at">ylab =</span> <span class="st">"PIP"</span>)</span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>cs_col <span class="ot">&lt;-</span> <span class="fu">rep</span>(<span class="st">"grey60"</span>, p); <span class="cf">for</span> (k <span class="cf">in</span> <span class="fu">seq_along</span>(cs_su)) cs_col[cs_su[[k]]<span class="sc">$</span>cs] <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"#1a6e3c"</span>, <span class="st">"#2c7fb8"</span>, <span class="st">"grey30"</span>)[<span class="fu">min</span>(k, <span class="dv">3</span>)]</span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="dv">1</span><span class="sc">:</span>p, fit<span class="sc">$</span>pip, <span class="at">type =</span> <span class="st">"h"</span>, <span class="at">lwd =</span> <span class="dv">3</span>, <span class="at">col =</span> cs_col, <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>), <span class="at">panel.first =</span> <span class="fu">eval</span>(causal_lines),</span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"SuSiE (L = 10)의 PIP (색 = 효과별 신용집합)"</span>, <span class="at">xlab =</span> <span class="st">"SNP"</span>, <span class="at">ylab =</span> <span class="st">"PIP"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="09_finemapping_files/figure-html/susie-trap-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>빨간 점선이 인과 SNP입니다. <span class="math inline">\(L=10\)</span>으로 시작했지만 효과 둘만 사전분산이 0이 아니고 나머지 여덟은 꺼졌습니다. 두 효과의 신용집합은 각각 {40}과 {22}로 인과 SNP를 정확히 하나씩 담고, 태그 T의 PIP는 0입니다. 과정도 흥미롭습니다. 첫 반복이 끝났을 때 효과 1은 가장 강한 T(31)에 <span class="math inline">\(\alpha = 0.97\)</span>을 두고 있습니다. 반복이 거듭되며 효과 2가 A(22)를 점점 확실히 잡으면, A를 뺀 잔차에서는 T보다 B(40)가 더 잘 맞으므로 효과 1이 B로 옮겨 갑니다. 한 번 고른 SNP를 고칠 수 있다는 것이 전진 선택과의 차이입니다. 마지막 줄은 문턱을 susieR 기본값 0으로 둔 결과로, 거의 꺼진 효과 8개가 사전분산 0이 아닌 채 남아 <span class="math inline">\(L=10\)</span>개가 모두 켜지고 PIP 중앙값이 0.12로 올라갑니다.</p>
+</section>
+<section id="번-반복-susie도-만능은-아니다" class="level3">
+<h3 class="anchored" data-anchor-id="번-반복-susie도-만능은-아니다">(3) 20번 반복: SuSiE도 만능은 아니다</h3>
+<p>한 번의 성공은 우연일 수 있습니다. 시드만 바꿔 같은 설정을 20번 반복합니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb33"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" aria-hidden="true" tabindex="-1"></a>rep_res <span class="ot">&lt;-</span> <span class="fu">t</span>(<span class="fu">sapply</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">20</span>, <span class="cf">function</span>(s) {</span>
+<span id="cb33-2"><a href="#cb33-2" aria-hidden="true" tabindex="-1"></a>  d <span class="ot">&lt;-</span> <span class="fu">make_trap</span>(<span class="at">seed =</span> <span class="dv">1000</span> <span class="sc">+</span> s); pa <span class="ot">&lt;-</span> <span class="fu">pip_single</span>(d<span class="sc">$</span>ss<span class="sc">$</span>beta_hat, d<span class="sc">$</span>ss<span class="sc">$</span>se); ca <span class="ot">&lt;-</span> <span class="fu">credible_set</span>(pa)</span>
+<span id="cb33-3"><a href="#cb33-3" aria-hidden="true" tabindex="-1"></a>  f <span class="ot">&lt;-</span> <span class="fu">susie_ibss</span>(d<span class="sc">$</span>X, d<span class="sc">$</span>y, <span class="at">L =</span> <span class="dv">10</span>); cs <span class="ot">&lt;-</span> <span class="fu">susie_cs</span>(f, d<span class="sc">$</span>X); in_cs <span class="ot">&lt;-</span> <span class="cf">function</span>(j) <span class="fu">any</span>(<span class="fu">sapply</span>(cs, <span class="cf">function</span>(o) j <span class="sc">%in%</span> o<span class="sc">$</span>cs))</span>
+<span id="cb33-4"><a href="#cb33-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">c</span>(<span class="at">abf_top_is_T =</span> <span class="fu">which.max</span>(pa) <span class="sc">==</span> snp_t, <span class="at">abf_cs_has_causal =</span> <span class="fu">any</span>(<span class="fu">c</span>(snp_a, snp_b) <span class="sc">%in%</span> ca),</span>
+<span id="cb33-5"><a href="#cb33-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">susie_n_cs =</span> <span class="fu">length</span>(cs), <span class="at">susie_both =</span> <span class="fu">in_cs</span>(snp_a) <span class="sc">&amp;&amp;</span> <span class="fu">in_cs</span>(snp_b), <span class="at">susie_cs_has_T =</span> <span class="fu">in_cs</span>(snp_t))</span>
+<span id="cb33-6"><a href="#cb33-6" aria-hidden="true" tabindex="-1"></a>}))</span>
+<span id="cb33-7"><a href="#cb33-7" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">colSums</span>(rep_res))                                                <span class="co"># 20번 중 해당 사건의 횟수 (susie_n_cs는 합계)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>     abf_top_is_T abf_cs_has_causal        susie_n_cs        susie_both 
+               14                 9                34                14 
+   susie_cs_has_T 
+                6 </code></pre>
+</div>
+</div>
+<p>단일 인과 ABF는 20번 중 14번 PIP 1위가 태그 T였고, 신용집합에 인과 SNP가 하나라도 든 경우는 9번뿐입니다. SuSiE는 14번 A와 B를 서로 다른 신용집합으로 찾았지만, 6번은 T 하나짜리 신용집합에 머물렀습니다. 태그 하나로도 두 효과의 합을 꽤 잘 설명하기 때문에 데이터가 두 설명을 잘 구분하지 못할 때도 있고, IBSS가 좌표 상승이라 국소 최적에 머물 때도 있습니다. SuSiE는 단일 인과 가정의 실패를 크게 줄이지만 없애지는 못합니다.</p>
+</section>
+</section>
+<section id="실습-패키지로-풀기" class="level2">
+<h2 class="anchored" data-anchor-id="실습-패키지로-풀기">실습: 패키지로 풀기</h2>
+<p>CI 환경에 <code>susieR</code>이 없어 실행하지 않습니다. 실제 분석에서 쓰는 형태만 보입니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb35"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(susieR)</span>
+<span id="cb35-2"><a href="#cb35-2" aria-hidden="true" tabindex="-1"></a>fit_pkg <span class="ot">&lt;-</span> <span class="fu">susie</span>(trap<span class="sc">$</span>X, trap<span class="sc">$</span>y, <span class="at">L =</span> <span class="dv">10</span>)          <span class="co"># 기본: X 표준화, 잔차분산·사전분산 추정, coverage 0.95</span></span>
+<span id="cb35-3"><a href="#cb35-3" aria-hidden="true" tabindex="-1"></a>fit_pkg<span class="sc">$</span>sets                                      <span class="co"># 신용집합(cs), 순도(purity), coverage</span></span>
+<span id="cb35-4"><a href="#cb35-4" aria-hidden="true" tabindex="-1"></a><span class="fu">susie_get_cs</span>(fit_pkg, <span class="at">X =</span> trap<span class="sc">$</span>X, <span class="at">coverage =</span> <span class="fl">0.95</span>, <span class="at">min_abs_corr =</span> <span class="fl">0.5</span>)</span>
+<span id="cb35-5"><a href="#cb35-5" aria-hidden="true" tabindex="-1"></a>fit_pkg<span class="sc">$</span>pip                                       <span class="co"># = susie_get_pip(fit_pkg)</span></span>
+<span id="cb35-6"><a href="#cb35-6" aria-hidden="true" tabindex="-1"></a><span class="fu">susie_plot</span>(fit_pkg, <span class="at">y =</span> <span class="st">"PIP"</span>)                    <span class="co"># 신용집합별로 색칠한 PIP 그림</span></span>
+<span id="cb35-7"><a href="#cb35-7" aria-hidden="true" tabindex="-1"></a>fit_ref <span class="ot">&lt;-</span> <span class="fu">susie</span>(trap<span class="sc">$</span>X, trap<span class="sc">$</span>y, <span class="at">L =</span> <span class="dv">10</span>, <span class="at">refine =</span> <span class="cn">TRUE</span>)   <span class="co"># 국소 최적을 벗어나는 추가 탐색</span></span>
+<span id="cb35-8"><a href="#cb35-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 요약통계(z)와 LD 행렬(R)만 있을 때: SuSiE-RSS (Zou et al. 2022)</span></span>
+<span id="cb35-9"><a href="#cb35-9" aria-hidden="true" tabindex="-1"></a>z <span class="ot">&lt;-</span> trap<span class="sc">$</span>ss<span class="sc">$</span>z; R <span class="ot">&lt;-</span> <span class="fu">cor</span>(trap<span class="sc">$</span>X)</span>
+<span id="cb35-10"><a href="#cb35-10" aria-hidden="true" tabindex="-1"></a>fit_rss <span class="ot">&lt;-</span> <span class="fu">susie_rss</span>(<span class="at">z =</span> z, <span class="at">R =</span> R, <span class="at">n =</span> n, <span class="at">L =</span> <span class="dv">10</span>)</span>
+<span id="cb35-11"><a href="#cb35-11" aria-hidden="true" tabindex="-1"></a><span class="fu">estimate_s_rss</span>(z, R, <span class="at">n =</span> n)                       <span class="co"># z와 R의 불일치 정도 (0에 가까울수록 일관)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<p>실무에서는 개인 수준 유전형보다 요약통계와 외부 LD 참조 패널(reference panel)로 fine-mapping하는 경우가 많습니다. 다중 인과 모형은 단일 인과 ABF와 달리 LD 행렬 <span class="math inline">\(R\)</span>을 반드시 쓰며, 여기서 새로운 함정이 생깁니다. 대안 방법으로는 인과 SNP 조합을 확률적으로 탐색하는 FINEMAP(Benner et al.&nbsp;2016)이 있고, 전체 방법의 개관은 Schaid, Chen &amp; Larson(2018)의 리뷰가 좋습니다.</p>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Warning
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><strong>요약통계 fine-mapping의 네 가지 함정.</strong> (1) <strong>LD 불일치</strong>: GWAS 표본과 참조 패널의 인구집단·표본이 다르면 <span class="math inline">\(z\)</span>와 <span class="math inline">\(R\)</span>이 서로 모순되고, 다중 인과 모형은 이 모순을 추가 인과 신호나 엉뚱한 신용집합으로 설명하려 합니다(Zou et al.&nbsp;2022에서 논의). 가능하면 GWAS 표본 자체의 LD를 쓰고, <code>estimate_s_rss</code> 같은 진단을 확인합니다. (2) <strong>대립유전자 방향</strong>: <span class="math inline">\(z\)</span>의 부호는 효과 대립유전자 기준입니다. 요약통계와 LD 패널의 코딩이 다르면 해당 SNP의 <span class="math inline">\(z\)</span> 부호를 뒤집어 맞춰야 하며, SNP 하나만 어긋나도 <span class="math inline">\(z\)</span>와 <span class="math inline">\(R\)</span>이 모순됩니다. (3) <strong><span class="math inline">\(W\)</span> 민감도</strong>: <span class="math inline">\(W\)</span>가 <span class="math inline">\(V\)</span>보다 작거나 비슷하면 PIP와 신용집합이 크게 바뀝니다(연습문제 1). (4) <strong>커버리지</strong>: 95% 신용집합이 인과 변이를 95% 확률로 담는 것은 인과 수, 사전분포, LD가 모형대로일 때 이야기입니다. 위 태그 예제에서는 단일 인과 95% 신용집합이 인과 SNP를 하나도 담지 않았습니다.</p>
+</div>
+</div>
+</section>
+<section id="연습문제" class="level2">
+<h2 class="anchored" data-anchor-id="연습문제">연습문제</h2>
+<section id="문제-1.-w가-pip와-신용집합에-주는-영향" class="level3">
+<h3 class="anchored" data-anchor-id="문제-1.-w가-pip와-신용집합에-주는-영향">문제 1. W가 PIP와 신용집합에 주는 영향</h3>
+<p>강한 LD 좌위(<code>loc_s</code>)에서 <span class="math inline">\(\sqrt W\)</span>를 0.02, 0.05, 0.15, 0.5, 1로 바꿔 인과 SNP의 PIP와 95% 신용집합 크기를 구하십시오.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-7-contents" aria-controls="callout-7" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+풀이
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-7" class="callout-7-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="cell">
+<div class="sourceCode cell-code" id="cb36"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>ex1 <span class="ot">&lt;-</span> <span class="fu">t</span>(<span class="fu">sapply</span>(<span class="fu">c</span>(<span class="fl">0.02</span>, <span class="fl">0.05</span>, <span class="fl">0.15</span>, <span class="fl">0.5</span>, <span class="dv">1</span>), <span class="cf">function</span>(w) {</span>
+<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a>  pp <span class="ot">&lt;-</span> <span class="fu">pip_single</span>(ss<span class="sc">$</span>beta_hat, ss<span class="sc">$</span>se, w<span class="sc">^</span><span class="dv">2</span>); <span class="fu">c</span>(<span class="at">sqrt_W =</span> w, <span class="at">pip_causal =</span> pp[causal], <span class="at">cs_size =</span> <span class="fu">length</span>(<span class="fu">credible_set</span>(pp))) }))</span>
+<span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">round</span>(ex1, <span class="dv">3</span>)); <span class="fu">cat</span>(<span class="st">"이 좌위의 V = se^2 중앙값:"</span>, <span class="fu">signif</span>(<span class="fu">median</span>(ss<span class="sc">$</span>se<span class="sc">^</span><span class="dv">2</span>), <span class="dv">2</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>     sqrt_W pip_causal cs_size
+[1,]   0.02      0.104      34
+[2,]   0.05      0.410      15
+[3,]   0.15      0.619       9
+[4,]   0.50      0.646       8
+[5,]   1.00      0.648       8</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>이 좌위의 V = se^2 중앙값: 0.0016 </code></pre>
+</div>
+</div>
+<p>이 좌위에서 <span class="math inline">\(V = \text{se}^2\)</span>의 중앙값은 약 0.0016입니다. <span class="math inline">\(\sqrt W = 0.02\)</span>(<span class="math inline">\(W = 0.0004\)</span>)처럼 <span class="math inline">\(W\)</span>가 <span class="math inline">\(V\)</span>보다 작거나 비슷하면 <span class="math inline">\(r = W/(V+W)\)</span>가 작아 지수 <span class="math inline">\(r z^2/2\)</span>가 눌리고 SNP 사이의 차이가 줄어 PIP가 평평해집니다. 인과 SNP의 PIP가 0.10, 신용집합이 34개까지 커집니다. <span class="math inline">\(W \gg V\)</span>가 되면 <span class="math inline">\(\text{ABF}_j \approx \sqrt{V_j/W}\,e^{z_j^2/2}\)</span>에서 <span class="math inline">\(W\)</span>가 모든 SNP에 공통인 인자라 PIP의 분자와 분모에서 약분되므로, PIP가 <span class="math inline">\(W\)</span>에 거의 무관해집니다(0.15 이상에서 0.62~0.65, 8~9개). 반면 이 좌위에 연관이 있는지를 묻는 ABF 자체의 크기는 여전히 <span class="math inline">\(W\)</span>에 의존합니다.</p>
+</div>
+</div>
+</div>
+</section>
+<section id="문제-2.-ld-강도와-신용집합-크기" class="level3">
+<h3 class="anchored" data-anchor-id="문제-2.-ld-강도와-신용집합-크기">문제 2. LD 강도와 신용집합 크기</h3>
+<p><code>make_locus</code>로 <span class="math inline">\(\rho\)</span>를 0.5에서 0.998까지 바꾸며 시드 10개씩 반복하고, 평균 신용집합 크기, 신용집합이 인과 SNP를 담은 비율, 리드 SNP가 인과 SNP인 비율을 구하십시오.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-8-contents" aria-controls="callout-8" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+풀이
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-8" class="callout-8-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="cell">
+<div class="sourceCode cell-code" id="cb39"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" aria-hidden="true" tabindex="-1"></a>rho_set <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.5</span>, <span class="fl">0.8</span>, <span class="fl">0.9</span>, <span class="fl">0.95</span>, <span class="fl">0.98</span>, <span class="fl">0.99</span>, <span class="fl">0.995</span>, <span class="fl">0.998</span>)</span>
+<span id="cb39-2"><a href="#cb39-2" aria-hidden="true" tabindex="-1"></a>ex2 <span class="ot">&lt;-</span> <span class="fu">t</span>(<span class="fu">sapply</span>(rho_set, <span class="cf">function</span>(rho) <span class="fu">rowMeans</span>(<span class="fu">sapply</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">10</span>, <span class="cf">function</span>(s) {</span>
+<span id="cb39-3"><a href="#cb39-3" aria-hidden="true" tabindex="-1"></a>  d <span class="ot">&lt;-</span> <span class="fu">make_locus</span>(rho, <span class="at">seed =</span> <span class="dv">500</span> <span class="sc">+</span> s); pp <span class="ot">&lt;-</span> <span class="fu">pip_single</span>(d<span class="sc">$</span>ss<span class="sc">$</span>beta_hat, d<span class="sc">$</span>ss<span class="sc">$</span>se); cs <span class="ot">&lt;-</span> <span class="fu">credible_set</span>(pp)</span>
+<span id="cb39-4"><a href="#cb39-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">c</span>(<span class="at">cs_size =</span> <span class="fu">length</span>(cs), <span class="at">covered =</span> causal <span class="sc">%in%</span> cs, <span class="at">lead_is_causal =</span> <span class="fu">which.max</span>(<span class="fu">abs</span>(d<span class="sc">$</span>ss<span class="sc">$</span>z)) <span class="sc">==</span> causal) }))))</span>
+<span id="cb39-5"><a href="#cb39-5" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">data.frame</span>(<span class="at">rho =</span> rho_set, <span class="fu">round</span>(ex2, <span class="dv">2</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>    rho cs_size covered lead_is_causal
+1 0.500     1.0       1            1.0
+2 0.800     1.0       1            1.0
+3 0.900     1.0       1            1.0
+4 0.950     1.0       1            1.0
+5 0.980     1.9       1            0.9
+6 0.990     3.4       1            0.7
+7 0.995     3.7       1            0.7
+8 0.998     5.5       1            0.3</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb41"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb41-1"><a href="#cb41-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="fu">seq_along</span>(rho_set), ex2[, <span class="st">"cs_size"</span>], <span class="at">type =</span> <span class="st">"b"</span>, <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> <span class="st">"#1a6e3c"</span>, <span class="at">xaxt =</span> <span class="st">"n"</span>, <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fu">max</span>(ex2[, <span class="st">"cs_size"</span>]) <span class="sc">+</span> <span class="dv">1</span>),</span>
+<span id="cb41-2"><a href="#cb41-2" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"LD가 강할수록 신용집합이 커진다"</span>, <span class="at">xlab =</span> <span class="st">"잠재 AR(1) 상관 rho"</span>, <span class="at">ylab =</span> <span class="st">"평균 95% 신용집합 크기"</span>)</span>
+<span id="cb41-3"><a href="#cb41-3" aria-hidden="true" tabindex="-1"></a><span class="fu">axis</span>(<span class="dv">1</span>, <span class="at">at =</span> <span class="fu">seq_along</span>(rho_set), <span class="at">labels =</span> rho_set)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="09_finemapping_files/figure-html/ex2-ld-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>LD가 약한 좌위(<span class="math inline">\(\rho \le 0.95\)</span>)에서는 신용집합이 거의 항상 SNP 하나이고, <span class="math inline">\(\rho\)</span>가 0.98을 넘으면서 커집니다. 커버리지(인과 SNP를 담은 비율)는 모든 <span class="math inline">\(\rho\)</span>에서 유지되지만, 리드 SNP가 인과 SNP인 비율은 <span class="math inline">\(\rho = 0.998\)</span>에서 10번 중 3번으로 떨어집니다. 이 모형이 맞는 한 신용집합은 커져서 불확실성을 표현하고, 리드 SNP 하나만 보고하면 그 불확실성이 사라집니다.</p>
+</div>
+</div>
+</div>
+</section>
+<section id="문제-3.-l-1인-susie는-단일-인과-abf와-같은가" class="level3">
+<h3 class="anchored" data-anchor-id="문제-3.-l-1인-susie는-단일-인과-abf와-같은가">문제 3. L = 1인 SuSiE는 단일 인과 ABF와 같은가</h3>
+<p><code>susie_ibss</code>를 <code>L = 1</code>, <code>prior_var = 0.15^2</code>, <code>update_s2 = FALSE</code>로 <code>loc_s</code>에 적용해 <span class="math inline">\(\alpha\)</span>를 <code>pip_single</code>의 PIP와 비교하십시오. 차이가 있다면 어디서 오는지 찾으십시오.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-9-contents" aria-controls="callout-9" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+풀이
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-9" class="callout-9-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="cell">
+<div class="sourceCode cell-code" id="cb42"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a>f1 <span class="ot">&lt;-</span> <span class="fu">susie_ibss</span>(loc_s<span class="sc">$</span>X, loc_s<span class="sc">$</span>y, <span class="at">L =</span> <span class="dv">1</span>, <span class="at">prior_var =</span> <span class="fl">0.15</span><span class="sc">^</span><span class="dv">2</span>, <span class="at">update_s2 =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb42-2"><a href="#cb42-2" aria-hidden="true" tabindex="-1"></a>pa <span class="ot">&lt;-</span> <span class="fu">pip_single</span>(ss<span class="sc">$</span>beta_hat, ss<span class="sc">$</span>se, <span class="fl">0.15</span><span class="sc">^</span><span class="dv">2</span>)                          <span class="co"># se_j: SNP별 잔차분산으로 계산</span></span>
+<span id="cb42-3"><a href="#cb42-3" aria-hidden="true" tabindex="-1"></a>xtx <span class="ot">&lt;-</span> <span class="fu">colSums</span>(<span class="fu">scale</span>(loc_s<span class="sc">$</span>X, <span class="at">scale =</span> <span class="cn">FALSE</span>)<span class="sc">^</span><span class="dv">2</span>)</span>
+<span id="cb42-4"><a href="#cb42-4" aria-hidden="true" tabindex="-1"></a>pa_common <span class="ot">&lt;-</span> <span class="fu">pip_single</span>(ss<span class="sc">$</span>beta_hat, <span class="fu">sqrt</span>(<span class="fu">var</span>(loc_s<span class="sc">$</span>y) <span class="sc">/</span> xtx), <span class="fl">0.15</span><span class="sc">^</span><span class="dv">2</span>)   <span class="co"># se_j = sqrt(sigma^2 / x_j'x_j)</span></span>
+<span id="cb42-5"><a href="#cb42-5" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"최대 |alpha - PIP|: SNP별 se"</span>, <span class="fu">signif</span>(<span class="fu">max</span>(<span class="fu">abs</span>(f1<span class="sc">$</span>alpha[<span class="dv">1</span>, ] <span class="sc">-</span> pa)), <span class="dv">2</span>),</span>
+<span id="cb42-6"><a href="#cb42-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">"| 공통 sigma^2 se"</span>, <span class="fu">signif</span>(<span class="fu">max</span>(<span class="fu">abs</span>(f1<span class="sc">$</span>alpha[<span class="dv">1</span>, ] <span class="sc">-</span> pa_common)), <span class="dv">2</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>최대 |alpha - PIP|: SNP별 se 0.04 | 공통 sigma^2 se 3.5e-18 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb44"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(pa, f1<span class="sc">$</span>alpha[<span class="dv">1</span>, ], <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> <span class="st">"#1a6e3c"</span>, <span class="at">main =</span> <span class="st">"L = 1 SuSiE 대 단일 인과 ABF"</span>,</span>
+<span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">"단일 인과 ABF의 PIP"</span>, <span class="at">ylab =</span> <span class="st">"SuSiE(L = 1)의 alpha"</span>); <span class="fu">abline</span>(<span class="dv">0</span>, <span class="dv">1</span>, <span class="at">col =</span> <span class="st">"grey60"</span>, <span class="at">lty =</span> <span class="dv">2</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="09_finemapping_files/figure-html/ex3-l1-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>거의 같지만 최대 0.04 차이가 납니다. <code>sumstats</code>의 <span class="math inline">\(\text{se}_j\)</span>는 SNP마다 그 SNP로 회귀한 잔차분산을 쓰고, SER은 모든 SNP에 같은 <span class="math inline">\(\sigma^2\)</span>(여기서는 <span class="math inline">\(\mathrm{var}(y)\)</span>)를 씁니다. se를 <span class="math inline">\(\sqrt{\sigma^2/x_j^\top x_j}\)</span>로 바꾸면 차이가 기계 정밀도 수준으로 사라집니다. 곧 SuSiE는 단일 인과 fine-mapping을 부품으로 삼아 <span class="math inline">\(L\)</span>개 쌓은 모형이고, <span class="math inline">\(L=1\)</span>이면 둘은 같은 모형입니다.</p>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="정리" class="level2">
+<h2 class="anchored" data-anchor-id="정리">정리</h2>
+<ul>
+<li>p-value는 연관의 강도를 잴 뿐 인과 확률이 아닙니다. LD로 묶인 SNP들은 비슷한 p를 받으므로 fine-mapping은 증거를 SNP들 사이에 확률로 나눠야 합니다.</li>
+<li>Wakefield ABF는 <span class="math inline">\(\hat\beta\)</span>, se만으로 계산하는 베이즈 인자로 <span class="math inline">\(\log\text{ABF} = \tfrac12\log(1-r) + \tfrac12 r z^2\)</span>, <span class="math inline">\(r = W/(V+W)\)</span>입니다. 같은 <span class="math inline">\(z\)</span>라도 <span class="math inline">\(n\)</span>과 <span class="math inline">\(W\)</span>에 따라 값이 달라집니다.</li>
+<li>단일 인과 가정 아래 <span class="math inline">\(\text{PIP}_j = \text{ABF}_j/\sum_k \text{ABF}_k\)</span>이고 LD 행렬이 필요 없습니다. 95% 신용집합은 PIP 누적합으로 만들고, LD가 강할수록 커집니다.</li>
+<li>인과 변이가 둘이면 단일 인과 모형은 두 번째 신호를 놓치거나 태그 SNP에 PIP를 몰아 줍니다. SuSiE는 단일효과를 <span class="math inline">\(L\)</span>개 쌓아 IBSS로 적합하고, 효과별 신용집합과 순도로 신호를 나눕니다.</li>
+<li>요약통계 fine-mapping에서는 LD 참조 패널 불일치, 대립유전자 방향, <span class="math inline">\(W\)</span> 민감도를 확인해야 하며, 신용집합의 커버리지는 모형 가정이 맞을 때만 보장됩니다.</li>
+</ul>
+</section>
+<section id="다음-시간" class="level2">
+<h2 class="anchored" data-anchor-id="다음-시간">다음 시간</h2>
+<p>W10에서는 <strong>colocalization</strong>을 다룹니다. GWAS 신호와 eQTL 신호가 같은 좌위에 겹쳐 있을 때, 두 형질이 정말 같은 인과 변이를 공유하는지 아니면 LD로 가까이 있는 서로 다른 변이인지를 묻습니다. 이번 주에 만든 <code>log_abf</code>와 <code>log_sum_exp</code>, 기호 <span class="math inline">\(\hat\beta\)</span>, se, <span class="math inline">\(V\)</span>, <span class="math inline">\(z\)</span>, <span class="math inline">\(W\)</span>를 그대로 가져가 두 형질의 단일 인과 fine-mapping을 결합한 다섯 가설의 사후확률을 계산합니다.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<!-- AI Chat Widget 초기화 -->
+
+<!-- _quarto.yml의 include-after-body에 등록되어 모든 페이지에 자동 삽입됩니다 -->
+
+<script>
+
+  // ★ Cloudflare Worker 배포 후 URL로 교체하세요
+
+  const WORKER_URL = "https://falling-wave-447f.eh0129s.workers.dev/";
+
+
+
+  // 각 .qmd 파일의 YAML에서 ai-context를 읽어옵니다
+
+  // (없으면 빈 문자열 → 기본 안내 메시지)
+
+  const metaContext = document.querySelector('meta[name="ai-context"]');
+
+  const metaTitle   = document.querySelector('meta[name="ai-title"]') || { content: document.title };
+
+
+
+  window.AI_CHAT_CONFIG = {
+
+    workerUrl:      WORKER_URL,
+
+    chapterContext: metaContext ? metaContext.content : "",
+
+    chapterTitle:   metaTitle  ? metaTitle.content   : document.title,
+
+  };
+
+</script>
+
+<script src="../_extensions/ai-chat/ai-chat.js" defer=""></script>
+
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+<p>Copyright 2026, Eunji</p>
+</div>   
+    <div class="nav-footer-center">
+      &nbsp;
+    </div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+<script src="../site_libs/quarto-html/zenscroll-min.js"></script>
+</body></html>

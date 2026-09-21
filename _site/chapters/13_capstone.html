@@ -1,0 +1,1591 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.32">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Eunji Ha">
+<meta name="dcterms.date" content="2026-09-21">
+<meta name="description" content="질문 정하기부터 사전예측검사, 적합, 수렴 진단, 사후예측검사, 민감도 분석, 보고까지 베이지안 워크플로우를 단일세포 세포유형 비율 예제 하나로 처음부터 끝까지 따라갑니다.">
+
+<title>W13. 캡스톤: 자기 데이터에 베이지안 모형 적용하기 – 베이지안 통계</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../images/logo.ico" rel="icon">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-b7acaf8b0572301ab572ffd94e5b5c34.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<style>html{ scroll-behavior: smooth; }</style>
+<meta name="ai-title" content="W13. 캡스톤: 자기 데이터에 베이지안 모형 적용하기">
+<meta name="ai-context" content="
+이 챕터는 강의의 마지막 주로, 13주 동안 배운 도구를 자기 데이터에 적용하는 베이지안 워크플로우(Gelman et al. 2020, Bayesian Workflow)를 다룹니다. 단계는 질문과 추정 대상 정하기, 생성 모형 쓰기, 사전예측검사(prior predictive check), 참값을 아는 가짜 데이터로 모수 복원(fake-data simulation, 반복하면 SBC; Talts et al. 2018), 적합, 수렴 진단(R-hat 1.01 미만, 체인 4개 기준 bulk-ESS 400 이상; Vehtari et al. 2021), 사후예측검사(PPC), 사전 민감도 분석, 모형 비교(LOO/WAIC, 표준오차와 함께), 보고(Kruschke 2021의 BARG)입니다. 데이터 유형별 가능도는 카운트는 Poisson/음이항, 비율은 이항/베타-이항 또는 로짓 정규 랜덤효과, 연속은 정규/t, 희소 회귀는 horseshoe 사전(W8), 요약통계는 정규 근사 ABF(W9, W10), 이진 표지 서열은 베르누이 방출 HMM(W11)입니다.
+완결 예제는 가상의 단일세포 RNA-seq 데이터입니다. 환자 12명(대조 6, 질환 6)에서 환자 i의 전체 세포 n_i개 중 특정 세포유형 y_i개를 세고, 모형은 y_i ~ Binomial(n_i, theta_i), logit(theta_i) = a_i = beta0 + beta1 * disease_i + u_i, u_i ~ Normal(0, tau^2) 입니다. 사전분포는 beta0 ~ N(-2, 1.5^2), beta1 ~ N(0, 1), tau ~ Half-Normal(0, 1) 이고, beta ~ N(0, 10^2) 같은 넓은 사전은 로짓 스케일에서 theta를 0과 1 근처로 몰아넣는다는 것을 사전예측으로 보입니다. 세포를 독립 관측으로 보는 glm(cbind(y, n - y) ~ disease, family = binomial)은 가성반복(pseudoreplication) 때문에 표준오차가 지나치게 작고(Squair et al. 2021), beta1 = 0인 가상 데이터에서도 p < 0.05가 대부분 나옵니다. 반복 단위는 세포가 아니라 환자입니다.
+실습 함수는 로그사후 log_post_ccp(par, y, n_cell, x, centered), 성분별 확률보행 메트로폴리스 cw_metropolis, 4체인 실행 run_ccp, W6에서 그대로 복사한 split_rhat, var_plus_hat, ess_basic, 진단표 diag_tab, 과산포 검정통계량 disp_stat(군별 합동 비율 주변의 피어슨 카이제곱, 순수 이항이면 약 10), 사전예측 표본 prior_theta, 가중 분위수 wq, 사전 민감도 sens_row(사전만 바꿀 때 가중치 = 새 사전 / 기존 사전인 중요도 재가중)입니다. 환자당 세포가 수백~수천 개라 환자별 로짓이 데이터로 강하게 정해지므로 비중심화는 성분별 메트로폴리스에서 수렴하지 못하고 중심화가 기준을 통과합니다. brms 예시(brm, pp_check, loo, sample_prior = 'only')는 eval: false 입니다.
+">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../assets/html.css">
+</head>
+
+<body class="nav-sidebar floating nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../index.html">
+    <span class="navbar-title">베이지안 통계</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link active" href="../index.html" aria-current="page"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+</ul>
+            <ul class="navbar-nav navbar-nav-scroll ms-auto">
+  <li class="nav-item compact">
+    <a class="nav-link" href="https://github.com/kkonoo/4_Bayes"> <i class="bi bi-github" role="img">
+</i> 
+<span class="menu-text"></span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../chapters/08_bayesian_regression.html">Part 2. 생명정보학 응용</a></li><li class="breadcrumb-item"><a href="../chapters/13_capstone.html">W13. 캡스톤: 자기 데이터에 베이지안 모형 적용하기</a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-full page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Home</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 1. 베이지안 통계의 기초</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/01_probability_bayes.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W1. 확률과 베이즈 정리</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/02_conjugate.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W2. 켤레사전분포 (Conjugate Priors)</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/03_prior_posterior.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W3. 사전분포의 선택과 사후 요약</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/04_approximation.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W4. 사후분포의 수치적 근사</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/05_mcmc_basics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W5. MCMC 기초 — Metropolis–Hastings와 Gibbs</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/06_hmc_diagnostics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W6. HMC와 수렴 진단</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/07_hierarchical_modelcomp.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W7. 계층 모형과 모델 비교</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 2. 생명정보학 응용</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/08_bayesian_regression.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W8. 베이지안 회귀와 축소사전분포</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/09_finemapping.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W9. GWAS fine-mapping</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/10_colocalization.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W10. Colocalization</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/11_hmm_chromatin.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W11. HMM 기반 chromatin state</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/12_cnv_calling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W12. CNV calling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/13_capstone.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text">W13. 캡스톤: 자기 데이터에 베이지안 모형 적용하기</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Contents</h2>
+   
+  <ul>
+  <li><a href="#학습-목표" id="toc-학습-목표" class="nav-link active" data-scroll-target="#학습-목표">학습 목표</a></li>
+  <li><a href="#어디서부터-시작하나" id="toc-어디서부터-시작하나" class="nav-link" data-scroll-target="#어디서부터-시작하나">어디서부터 시작하나</a></li>
+  <li><a href="#베이지안-워크플로우" id="toc-베이지안-워크플로우" class="nav-link" data-scroll-target="#베이지안-워크플로우">베이지안 워크플로우</a></li>
+  <li><a href="#데이터-유형에-맞는-가능도-고르기" id="toc-데이터-유형에-맞는-가능도-고르기" class="nav-link" data-scroll-target="#데이터-유형에-맞는-가능도-고르기">데이터 유형에 맞는 가능도 고르기</a></li>
+  <li><a href="#실습-base-r로-직접-구현-세포유형-비율이-질환군에서-다른가" id="toc-실습-base-r로-직접-구현-세포유형-비율이-질환군에서-다른가" class="nav-link" data-scroll-target="#실습-base-r로-직접-구현-세포유형-비율이-질환군에서-다른가">실습: base R로 직접 구현 — 세포유형 비율이 질환군에서 다른가</a>
+  <ul>
+  <li><a href="#a-사전예측검사-넓은-사전은-무정보가-아니다" id="toc-a-사전예측검사-넓은-사전은-무정보가-아니다" class="nav-link" data-scroll-target="#a-사전예측검사-넓은-사전은-무정보가-아니다">(a) 사전예측검사: 넓은 사전은 무정보가 아니다</a></li>
+  <li><a href="#b-세포를-독립-관측으로-보면-가성반복" id="toc-b-세포를-독립-관측으로-보면-가성반복" class="nav-link" data-scroll-target="#b-세포를-독립-관측으로-보면-가성반복">(b) 세포를 독립 관측으로 보면: 가성반복</a></li>
+  <li><a href="#c-계층-모형과-표집기" id="toc-c-계층-모형과-표집기" class="nav-link" data-scroll-target="#c-계층-모형과-표집기">(c) 계층 모형과 표집기</a></li>
+  <li><a href="#d-수렴-진단" id="toc-d-수렴-진단" class="nav-link" data-scroll-target="#d-수렴-진단">(d) 수렴 진단</a></li>
+  <li><a href="#e-사후예측검사-환자-간-과산포" id="toc-e-사후예측검사-환자-간-과산포" class="nav-link" data-scroll-target="#e-사후예측검사-환자-간-과산포">(e) 사후예측검사: 환자 간 과산포</a></li>
+  <li><a href="#f-결과-질환-효과-beta_1" id="toc-f-결과-질환-효과-beta_1" class="nav-link" data-scroll-target="#f-결과-질환-효과-beta_1">(f) 결과: 질환 효과 <span class="math inline">\(\beta_1\)</span></a></li>
+  <li><a href="#g-민감도-분석" id="toc-g-민감도-분석" class="nav-link" data-scroll-target="#g-민감도-분석">(g) 민감도 분석</a></li>
+  </ul></li>
+  <li><a href="#모델-점검-체크리스트" id="toc-모델-점검-체크리스트" class="nav-link" data-scroll-target="#모델-점검-체크리스트">모델 점검 체크리스트</a></li>
+  <li><a href="#보고-템플릿" id="toc-보고-템플릿" class="nav-link" data-scroll-target="#보고-템플릿">보고 템플릿</a></li>
+  <li><a href="#실습-패키지로-풀기" id="toc-실습-패키지로-풀기" class="nav-link" data-scroll-target="#실습-패키지로-풀기">실습: 패키지로 풀기</a></li>
+  <li><a href="#연습문제" id="toc-연습문제" class="nav-link" data-scroll-target="#연습문제">연습문제</a>
+  <ul>
+  <li><a href="#문제-1.-넓은-절편-사전의-사전예측" id="toc-문제-1.-넓은-절편-사전의-사전예측" class="nav-link" data-scroll-target="#문제-1.-넓은-절편-사전의-사전예측">문제 1. 넓은 절편 사전의 사전예측</a></li>
+  <li><a href="#문제-2.-환자-수를-줄이면" id="toc-문제-2.-환자-수를-줄이면" class="nav-link" data-scroll-target="#문제-2.-환자-수를-줄이면">문제 2. 환자 수를 줄이면</a></li>
+  <li><a href="#문제-3.-자기-데이터용-체크리스트-쓰기" id="toc-문제-3.-자기-데이터용-체크리스트-쓰기" class="nav-link" data-scroll-target="#문제-3.-자기-데이터용-체크리스트-쓰기">문제 3. 자기 데이터용 체크리스트 쓰기</a></li>
+  </ul></li>
+  <li><a href="#정리" id="toc-정리" class="nav-link" data-scroll-target="#정리">정리</a></li>
+  <li><a href="#다음-시간" id="toc-다음-시간" class="nav-link" data-scroll-target="#다음-시간">다음 시간</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content column-body" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../chapters/08_bayesian_regression.html">Part 2. 생명정보학 응용</a></li><li class="breadcrumb-item"><a href="../chapters/13_capstone.html">W13. 캡스톤: 자기 데이터에 베이지안 모형 적용하기</a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title">W13. 캡스톤: 자기 데이터에 베이지안 모형 적용하기</h1>
+</div>
+
+<div>
+  <div class="description">
+    질문 정하기부터 사전예측검사, 적합, 수렴 진단, 사후예측검사, 민감도 분석, 보고까지 베이지안 워크플로우를 단일세포 세포유형 비율 예제 하나로 처음부터 끝까지 따라갑니다.
+  </div>
+</div>
+
+
+<div class="quarto-title-meta column-body">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Eunji Ha </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">September 21, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="학습-목표" class="level2">
+<h2 class="anchored" data-anchor-id="학습-목표">학습 목표</h2>
+<ul>
+<li>베이지안 워크플로우의 단계를 순서대로 말하고, 각 단계에 이 강의의 어느 주차 도구를 쓰는지 연결할 수 있다.</li>
+<li>데이터 유형과 반복 단위를 보고 가능도와 계층 구조를 고를 수 있고, 가성반복(pseudoreplication)을 알아볼 수 있다.</li>
+<li>사전예측검사로 사전분포를 고르고, 수렴 진단과 사후예측검사로 적합 결과를 점검할 수 있다.</li>
+<li>사전 민감도와 진단 결과를 포함해 베이지안 분석의 방법 문단을 쓸 수 있다.</li>
+</ul>
+</section>
+<section id="어디서부터-시작하나" class="level2">
+<h2 class="anchored" data-anchor-id="어디서부터-시작하나">어디서부터 시작하나</h2>
+<p>지난 12주 동안 켤레 사전, MCMC, 계층 모형, fine-mapping, HMM까지 도구를 하나씩 모았습니다. 막상 자기 데이터를 앞에 두면 질문이 달라집니다. 어떤 가능도를 쓸지, 사전분포는 무엇으로 할지, 체인이 수렴했는지, 결과를 논문에 어떻게 적을지. 이번 주는 이 질문들에 순서를 매기는 틀을 세우고, 단일세포 데이터의 세포유형 비율 비교라는 예제 하나를 처음부터 끝까지 따라갑니다. 미리 말해 두면, 모형을 <strong>돌리는 데</strong> 드는 시간보다 <strong>점검하는 데</strong> 드는 시간이 훨씬 깁니다. 이번 예제에서도 첫 번째 모형은 가성반복으로 과신하고, 두 번째 모형의 첫 표집기는 수렴하지 못합니다. 그것을 잡아내는 것이 워크플로우의 역할입니다.</p>
+</section>
+<section id="베이지안-워크플로우" class="level2">
+<h2 class="anchored" data-anchor-id="베이지안-워크플로우">베이지안 워크플로우</h2>
+<p>Gelman et al.&nbsp;(2020, “Bayesian Workflow”, arXiv:2011.01808)은 베이지안 분석을 모형 하나를 적합하는 일이 아니라 모형을 만들고, 점검하고, 고치는 과정 전체로 봅니다. 아래 표는 그 단계를 이 강의의 도구와 연결한 것이고, Gabry et al.&nbsp;(2019, JRSS-A)은 각 단계를 그림으로 점검하는 방법을 정리했습니다.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>단계</th>
+<th>묻는 질문</th>
+<th>도구</th>
+<th>주차</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1. 질문·추정 대상</td>
+<td>무엇을 어떤 척도로 비교하나</td>
+<td>사후확률로 답할 수 있는 질문으로 바꾸기</td>
+<td><a href="../chapters/01_probability_bayes.html">W1</a></td>
+</tr>
+<tr class="even">
+<td>2. 생성 모형(generative model)</td>
+<td>데이터가 어떻게 만들어졌나</td>
+<td>가능도 + 사전분포, 계층 구조</td>
+<td><a href="../chapters/02_conjugate.html">W2</a>, <a href="../chapters/07_hierarchical_modelcomp.html">W7</a>, <a href="../chapters/08_bayesian_regression.html">W8</a></td>
+</tr>
+<tr class="odd">
+<td>3. 사전예측검사(prior predictive check)</td>
+<td>사전분포만으로 만든 가짜 데이터가 말이 되나</td>
+<td>사전에서 모수를 뽑아 데이터 시뮬레이션</td>
+<td><a href="../chapters/03_prior_posterior.html">W3</a>(사전을 확률 척도로 옮겨 보기), 이번 주</td>
+</tr>
+<tr class="even">
+<td>4. 가짜 데이터로 모수 복원(fake-data simulation)</td>
+<td>참값을 아는 데이터에서 모수를 되찾나</td>
+<td>모의실험, SBC(Talts et al.&nbsp;2018)</td>
+<td><a href="../chapters/07_hierarchical_modelcomp.html">W7</a>, 이번 주</td>
+</tr>
+<tr class="odd">
+<td>5. 적합</td>
+<td>사후분포를 어떻게 얻나</td>
+<td>켤레, 격자·라플라스, MCMC, HMC</td>
+<td><a href="../chapters/02_conjugate.html">W2</a>, <a href="../chapters/04_approximation.html">W4</a>~<a href="../chapters/06_hmc_diagnostics.html">W6</a></td>
+</tr>
+<tr class="even">
+<td>6. 수렴 진단</td>
+<td>표본을 믿어도 되나</td>
+<td>R-hat, ESS, 트레이스, 발산 전이</td>
+<td><a href="../chapters/06_hmc_diagnostics.html">W6</a></td>
+</tr>
+<tr class="odd">
+<td>7. 사후예측검사(PPC)</td>
+<td>모형이 데이터의 중요한 특성을 재현하나</td>
+<td><span class="math inline">\(T(y^{\text{rep}})\)</span> 대 <span class="math inline">\(T(y)\)</span></td>
+<td><a href="../chapters/07_hierarchical_modelcomp.html">W7</a></td>
+</tr>
+<tr class="even">
+<td>8. 민감도 분석</td>
+<td>사전·모형 선택에 결론이 얼마나 흔들리나</td>
+<td>사전 척도 바꾸기, 사전확률 바꾸기</td>
+<td><a href="../chapters/03_prior_posterior.html">W3</a>, <a href="../chapters/07_hierarchical_modelcomp.html">W7</a>, <a href="../chapters/09_finemapping.html">W9</a>·<a href="../chapters/10_colocalization.html">W10</a></td>
+</tr>
+<tr class="odd">
+<td>9. 모형 비교</td>
+<td>어느 모형이 새 데이터를 더 잘 예측하나</td>
+<td>LOO/WAIC(표준오차와 함께), 베이즈 인자</td>
+<td><a href="../chapters/07_hierarchical_modelcomp.html">W7</a></td>
+</tr>
+<tr class="even">
+<td>10. 보고</td>
+<td>남이 읽고 재현할 수 있나</td>
+<td>사전분포 근거, 진단값, 민감도, 코드</td>
+<td>이번 주</td>
+</tr>
+</tbody>
+</table>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Tip
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>워크플로우는 한 방향으로 흐르는 파이프라인이 아니라 <strong>고리</strong>입니다. 사전예측이 말이 안 되면 사전분포로, 수렴 진단이 실패하면 모수화나 표집기로, PPC가 실패하면 생성 모형으로 되돌아갑니다. 되돌아간 이력 자체가 분석의 일부이므로 기록해 두어야 합니다.</p>
+</div>
+</div>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-2-contents" aria-controls="callout-2" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+수식으로 보기: 사전예측과 사후예측은 같은 시뮬레이션이다
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-2" class="callout-2-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>생성 모형은 결합분포 <span class="math inline">\(p(y, \theta) = p(y \mid \theta)\,p(\theta)\)</span> 하나입니다. 사전예측분포는 <span class="math inline">\(p(\tilde y) = \int p(\tilde y \mid \theta)\,p(\theta)\,d\theta\)</span>, 사후예측분포는 <span class="math inline">\(p(y^{\text{rep}} \mid y) = \int p(y^{\text{rep}} \mid \theta)\,p(\theta \mid y)\,d\theta\)</span>이고, 둘 다 “<span class="math inline">\(\theta\)</span>를 뽑고 → 그 <span class="math inline">\(\theta\)</span>로 데이터를 뽑는다”로 시뮬레이션합니다. 차이는 <span class="math inline">\(\theta\)</span>를 사전분포에서 뽑느냐 사후 표본에서 뽑느냐뿐입니다. 그래서 가짜 데이터를 만드는 함수 하나를 짜 두면 3·4·7단계에 모두 씁니다.</p>
+</div>
+</div>
+</div>
+</section>
+<section id="데이터-유형에-맞는-가능도-고르기" class="level2">
+<h2 class="anchored" data-anchor-id="데이터-유형에-맞는-가능도-고르기">데이터 유형에 맞는 가능도 고르기</h2>
+<p>가능도는 (1) 데이터가 가질 수 있는 값의 범위, (2) 반복 단위, (3) 분산이 기본 가능도가 허용하는 것보다 큰지로 고릅니다. 특히 “관측 하나가 무엇인가”와 “독립적으로 반복되는 단위가 무엇인가”를 따로 물어야 합니다. 세포 하나하나는 환자 안에서 이항처럼 행동해도, 환자마다 기저 비율이 다르면 환자를 넘어가는 순간 이항 분산보다 훨씬 큰 변동이 생깁니다. 과산포의 원인은 대개 이 반복 단위에 있습니다.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>데이터</th>
+<th>생명정보학 예</th>
+<th>기본 가능도</th>
+<th>흔한 확장</th>
+<th>주차</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>카운트</td>
+<td>유전자별 read 수</td>
+<td>Poisson</td>
+<td>과산포면 음이항(감마-포아송 혼합)</td>
+<td><a href="../chapters/02_conjugate.html">W2</a></td>
+</tr>
+<tr class="even">
+<td>비율(k / n)</td>
+<td>대립유전자 read, 세포유형 비율</td>
+<td>이항</td>
+<td>반복 단위 간 과산포면 베타-이항 또는 로짓 정규 랜덤효과</td>
+<td><a href="../chapters/04_approximation.html">W4</a>~<a href="../chapters/06_hmc_diagnostics.html">W6</a>, 이번 주</td>
+</tr>
+<tr class="odd">
+<td>연속</td>
+<td>로그 발현량, 효과 추정치</td>
+<td>정규</td>
+<td>이상치가 있으면 t</td>
+<td><a href="../chapters/02_conjugate.html">W2</a>, <a href="../chapters/07_hierarchical_modelcomp.html">W7</a></td>
+</tr>
+<tr class="even">
+<td>많은 예측변수</td>
+<td>다변이·다유전자 회귀</td>
+<td>정규 또는 이항 + 축소 사전</td>
+<td>horseshoe</td>
+<td><a href="../chapters/08_bayesian_regression.html">W8</a></td>
+</tr>
+<tr class="odd">
+<td>요약통계 <span class="math inline">\((\hat\beta, \text{SE})\)</span></td>
+<td>GWAS·eQTL 요약통계</td>
+<td><span class="math inline">\(\hat\beta \sim \mathcal{N}(\beta, \text{SE}^2)\)</span></td>
+<td>근사 베이즈 인자(ABF, Wakefield 2009)</td>
+<td><a href="../chapters/09_finemapping.html">W9</a>, <a href="../chapters/10_colocalization.html">W10</a></td>
+</tr>
+<tr class="even">
+<td>이진 표지의 서열</td>
+<td>게놈 구간별 히스톤 표지 유무</td>
+<td>상태별 베르누이 방출</td>
+<td>은닉 마르코프 모형(HMM)</td>
+<td><a href="../chapters/11_hmm_chromatin.html">W11</a></td>
+</tr>
+<tr class="odd">
+<td>구간별 read depth 서열</td>
+<td>복제수 변이</td>
+<td>상태별 방출분포</td>
+<td>HMM</td>
+<td><a href="../chapters/12_cnv_calling.html">W12</a></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="실습-base-r로-직접-구현-세포유형-비율이-질환군에서-다른가" class="level2">
+<h2 class="anchored" data-anchor-id="실습-base-r로-직접-구현-세포유형-비율이-질환군에서-다른가">실습: base R로 직접 구현 — 세포유형 비율이 질환군에서 다른가</h2>
+<p>환자 12명(대조 6, 질환 6)의 말초혈액 단일세포 RNA-seq을 클러스터링하고 세포유형을 주석했다고 합시다. 환자 <span class="math inline">\(i\)</span>의 전체 세포 <span class="math inline">\(n_i\)</span>개 중 관심 세포유형이 <span class="math inline">\(y_i\)</span>개입니다. 질문은 “질환군에서 이 세포유형의 비율이 더 높은가”이고, <strong>추정 대상</strong>은 질환 대 대조의 로짓 차이 <span class="math inline">\(\beta_1\)</span>, 곧 오즈비 <span class="math inline">\(e^{\beta_1}\)</span>입니다. 아래는 참값을 알고 만든 <strong>가상의 데이터</strong>입니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">24</span>)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>n_pat <span class="ot">&lt;-</span> <span class="dv">12</span>; disease <span class="ot">&lt;-</span> <span class="fu">rep</span>(<span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>), <span class="at">each =</span> <span class="dv">6</span>)                       <span class="co"># 대조 6명, 질환 6명</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>patient <span class="ot">&lt;-</span> <span class="fu">paste0</span>(<span class="fu">ifelse</span>(disease <span class="sc">==</span> <span class="dv">1</span>, <span class="st">"D"</span>, <span class="st">"C"</span>), <span class="fu">c</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">6</span>, <span class="dv">1</span><span class="sc">:</span><span class="dv">6</span>))</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>n_cell <span class="ot">&lt;-</span> <span class="fu">round</span>(<span class="fu">exp</span>(<span class="fu">runif</span>(n_pat, <span class="fu">log</span>(<span class="dv">300</span>), <span class="fu">log</span>(<span class="dv">3000</span>))))              <span class="co"># 환자별 전체 세포 수</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>b0_true <span class="ot">&lt;-</span> <span class="sc">-</span><span class="fl">1.7</span>; b1_true <span class="ot">&lt;-</span> <span class="fl">0.4</span>; tau_true <span class="ot">&lt;-</span> <span class="fl">0.5</span>                    <span class="co"># 참값: 나중에 복원되는지 확인</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>a_true <span class="ot">&lt;-</span> b0_true <span class="sc">+</span> b1_true <span class="sc">*</span> disease <span class="sc">+</span> <span class="fu">rnorm</span>(n_pat, <span class="dv">0</span>, tau_true)   <span class="co"># 환자별 로짓 a_i</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">rbinom</span>(n_pat, n_cell, <span class="fu">plogis</span>(a_true))                           <span class="co"># 관심 세포유형의 세포 수</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>dat <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(patient, disease, <span class="at">n =</span> n_cell, y, <span class="at">prop =</span> <span class="fu">round</span>(y <span class="sc">/</span> n_cell, <span class="dv">3</span>))</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(dat, <span class="at">row.names =</span> <span class="cn">FALSE</span>); <span class="fu">cat</span>(<span class="st">"전체 세포 수:"</span>, <span class="fu">sum</span>(n_cell), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code> patient disease    n   y  prop
+      C1       0  588 117 0.199
+      C2       0  504  67 0.133
+      C3       0 1518 162 0.107
+      C4       0  991 159 0.160
+      C5       0 1380 121 0.088
+      C6       0 2498 485 0.194
+      D1       1  571  92 0.161
+      D2       1 1742 202 0.116
+      D3       1 1900 476 0.251
+      D4       1  539  98 0.182
+      D5       1 1208 240 0.199
+      D6       1  704 268 0.381</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>전체 세포 수: 14143 </code></pre>
+</div>
+</div>
+<section id="a-사전예측검사-넓은-사전은-무정보가-아니다" class="level3">
+<h3 class="anchored" data-anchor-id="a-사전예측검사-넓은-사전은-무정보가-아니다">(a) 사전예측검사: 넓은 사전은 무정보가 아니다</h3>
+<p>모형은 <span class="math inline">\(\text{logit}\,\theta_i = \beta_0 + \beta_1 x_i + u_i\)</span>, <span class="math inline">\(u_i \sim \mathcal{N}(0, \tau^2)\)</span>입니다(<span class="math inline">\(x_i\)</span>는 질환 여부). 모든 <span class="math inline">\(\beta\)</span>에 <span class="math inline">\(\mathcal{N}(0, 10^2)\)</span>을 주면 “아무것도 가정하지 않은” 것처럼 보입니다. 사전분포에서 모수를 뽑아 새 환자 한 명의 <span class="math inline">\(\theta\)</span>를 만들어 보면 그렇지 않다는 것이 드러납니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>); n_sim <span class="ot">&lt;-</span> <span class="dv">20000</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>prior_theta <span class="ot">&lt;-</span> <span class="cf">function</span>(m0, s0, s1, s_tau) {   <span class="co"># 사전에서 모수를 뽑아 새 환자 한 명의 theta 계산</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  b0 <span class="ot">&lt;-</span> <span class="fu">rnorm</span>(n_sim, m0, s0); b1 <span class="ot">&lt;-</span> <span class="fu">rnorm</span>(n_sim, <span class="dv">0</span>, s1); tau <span class="ot">&lt;-</span> <span class="fu">abs</span>(<span class="fu">rnorm</span>(n_sim, <span class="dv">0</span>, s_tau))  <span class="co"># |N| = 반정규</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  x <span class="ot">&lt;-</span> <span class="fu">rbinom</span>(n_sim, <span class="dv">1</span>, <span class="fl">0.5</span>); <span class="fu">plogis</span>(b0 <span class="sc">+</span> b1 <span class="sc">*</span> x <span class="sc">+</span> tau <span class="sc">*</span> <span class="fu">rnorm</span>(n_sim))   <span class="co"># 질환/대조를 반반</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>th_vague <span class="ot">&lt;-</span> <span class="fu">prior_theta</span>(<span class="dv">0</span>, <span class="dv">10</span>, <span class="dv">10</span>, <span class="dv">10</span>)         <span class="co"># '무정보처럼 보이는' 사전</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>th_weak  <span class="ot">&lt;-</span> <span class="fu">prior_theta</span>(<span class="sc">-</span><span class="dv">2</span>, <span class="fl">1.5</span>, <span class="dv">1</span>, <span class="dv">1</span>)         <span class="co"># 약정보 사전</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>ext <span class="ot">&lt;-</span> <span class="cf">function</span>(th) <span class="fu">mean</span>(th <span class="sc">&lt;</span> <span class="fl">0.01</span> <span class="sc">|</span> th <span class="sc">&gt;</span> <span class="fl">0.99</span>)  <span class="co"># 0 또는 1에 달라붙은 비율</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">c</span>(<span class="at">extreme_vague =</span> <span class="fu">ext</span>(th_vague), <span class="at">extreme_weak =</span> <span class="fu">ext</span>(th_weak), <span class="fu">quantile</span>(th_weak, <span class="fu">c</span>(<span class="fl">0.05</span>, <span class="fl">0.5</span>, <span class="fl">0.95</span>))), <span class="dv">3</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>extreme_vague  extreme_weak            5%           50%           95% 
+        0.750         0.086         0.006         0.119         0.767 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>)); ttl <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"beta ~ N(0, 10^2), tau ~ HN(0, 10)"</span>, <span class="st">"beta0 ~ N(-2, 1.5^2), beta1 ~ N(0, 1), tau ~ HN(0, 1)"</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (m <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>) <span class="fu">hist</span>(<span class="fu">list</span>(th_vague, th_weak)[[m]], <span class="at">breaks =</span> <span class="dv">50</span>, <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#c0392b"</span>, <span class="st">"#1a6e3c"</span>)[m], <span class="at">border =</span> <span class="st">"white"</span>,</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>                    <span class="at">cex.main =</span> <span class="fl">0.9</span>, <span class="at">main =</span> ttl[m], <span class="at">xlab =</span> <span class="st">"사전예측 theta (세포유형 비율)"</span>, <span class="at">ylab =</span> <span class="st">"빈도"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="13_capstone_files/figure-html/unnamed-chunk-2-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>넓은 사전에서는 새 환자의 75.0%가 이 세포유형이 1% 미만이거나 99% 초과라고 예측합니다. 로짓 척도에서 폭 10은 확률 척도에서 “거의 0 아니면 거의 1”이라는 강한 주장입니다(<a href="../chapters/03_prior_posterior.html">W3</a>의 패키지 실습에서 로짓 척도 <span class="math inline">\(\mathcal{N}(0, 10^2)\)</span>을 <span class="math inline">\(\theta\)</span> 척도로 옮겨 본 것과 같은 현상). 약정보 사전은 다음 근거로 정했습니다. <span class="math inline">\(\beta_0 \sim \mathcal{N}(-2, 1.5^2)\)</span>: 대조군의 전형적인 비율을 <span class="math inline">\(\text{logit}^{-1}(-2) \approx 12\%\)</span>로 두고, 평균 ±2 표준편차가 로짓 <span class="math inline">\(-5\)</span>~<span class="math inline">\(1\)</span>, 곧 약 0.7%~73%를 덮게 해 드문 아형부터 주요 세포유형까지 허용합니다. <span class="math inline">\(\beta_1 \sim \mathcal{N}(0, 1)\)</span>: 사전 확률의 95%가 오즈비 <span class="math inline">\(e^{\pm 1.96} \approx 0.14\)</span>~<span class="math inline">\(7.1\)</span> 안에 있습니다. <span class="math inline">\(\tau \sim \text{Half-Normal}(0, 1)\)</span>: 환자 간 로짓 표준편차가 2를 넘기 어렵다고 봅니다. 이 사전의 사전예측 <span class="math inline">\(\theta\)</span>는 중앙값 0.119, 90% 구간 0.006~0.767로 도메인상 말이 되는 범위에 있습니다. 로짓, 로그 배수변화처럼 비선형 변환을 거치는 모수에 “넓어서 안전한” 사전을 주면 데이터 척도에서는 극단값을 강하게 믿는 사전이 됩니다. 사전분포는 모수 표가 아니라 <strong>사전예측 데이터</strong>로 판단하십시오.</p>
+</section>
+<section id="b-세포를-독립-관측으로-보면-가성반복" class="level3">
+<h3 class="anchored" data-anchor-id="b-세포를-독립-관측으로-보면-가성반복">(b) 세포를 독립 관측으로 보면: 가성반복</h3>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>fit_glm <span class="ot">&lt;-</span> <span class="fu">glm</span>(<span class="fu">cbind</span>(y, n <span class="sc">-</span> y) <span class="sc">~</span> disease, <span class="at">family =</span> binomial, <span class="at">data =</span> dat)   <span class="co"># 세포 하나 = 관측 하나</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">signif</span>(<span class="fu">summary</span>(fit_glm)<span class="sc">$</span>coefficients, <span class="dv">3</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>            Estimate Std. Error z value Pr(&gt;|z|)
+(Intercept)    -1.75     0.0325   -53.7 0.00e+00
+disease         0.40     0.0444     9.0 2.26e-19</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>se_bin <span class="ot">&lt;-</span> <span class="fu">sqrt</span>(dat<span class="sc">$</span>prop <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> dat<span class="sc">$</span>prop) <span class="sc">/</span> dat<span class="sc">$</span>n)              <span class="co"># 이항 가정 하의 환자별 비율 표준오차</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>p_grp <span class="ot">&lt;-</span> <span class="fu">plogis</span>(<span class="fu">coef</span>(fit_glm)[<span class="dv">1</span>] <span class="sc">+</span> <span class="fu">coef</span>(fit_glm)[<span class="dv">2</span>] <span class="sc">*</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>))  <span class="co"># glm이 추정한 군별 비율</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="dv">1</span><span class="sc">:</span>n_pat, dat<span class="sc">$</span>prop, <span class="at">pch =</span> <span class="dv">16</span>, <span class="at">col =</span> <span class="fu">ifelse</span>(disease <span class="sc">==</span> <span class="dv">1</span>, <span class="st">"#c0392b"</span>, <span class="st">"#2c7fb8"</span>), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.45</span>), <span class="at">xaxt =</span> <span class="st">"n"</span>,</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"환자별 세포유형 비율과 이항 95% 구간"</span>, <span class="at">xlab =</span> <span class="st">"환자"</span>, <span class="at">ylab =</span> <span class="st">"세포유형 비율 y / n"</span>)</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="fu">axis</span>(<span class="dv">1</span>, <span class="at">at =</span> <span class="dv">1</span><span class="sc">:</span>n_pat, <span class="at">labels =</span> patient, <span class="at">cex.axis =</span> <span class="fl">0.8</span>); <span class="fu">segments</span>(<span class="fu">c</span>(<span class="fl">0.6</span>, <span class="fl">6.6</span>), p_grp, <span class="fu">c</span>(<span class="fl">6.4</span>, <span class="fl">12.4</span>), p_grp, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">lty =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#2c7fb8"</span>, <span class="st">"#c0392b"</span>))</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="fu">arrows</span>(<span class="dv">1</span><span class="sc">:</span>n_pat, dat<span class="sc">$</span>prop <span class="sc">-</span> <span class="fl">1.96</span> <span class="sc">*</span> se_bin, <span class="dv">1</span><span class="sc">:</span>n_pat, dat<span class="sc">$</span>prop <span class="sc">+</span> <span class="fl">1.96</span> <span class="sc">*</span> se_bin, <span class="at">angle =</span> <span class="dv">90</span>, <span class="at">code =</span> <span class="dv">3</span>, <span class="at">length =</span> <span class="fl">0.03</span>, <span class="at">col =</span> <span class="st">"grey30"</span>)</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"topleft"</span>, <span class="at">bty =</span> <span class="st">"n"</span>, <span class="at">cex =</span> <span class="fl">0.8</span>, <span class="at">legend =</span> <span class="fu">c</span>(<span class="st">"대조군 환자 / glm 추정(점선)"</span>, <span class="st">"질환군 환자 / glm 추정(점선)"</span>, <span class="st">"이항 95% 구간"</span>), <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#2c7fb8"</span>, <span class="st">"#c0392b"</span>, <span class="st">"grey30"</span>), <span class="at">pch =</span> <span class="fu">c</span>(<span class="dv">16</span>, <span class="dv">16</span>, <span class="cn">NA</span>), <span class="at">lty =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">2</span>, <span class="dv">1</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="13_capstone_files/figure-html/unnamed-chunk-3-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p><span class="math inline">\(\hat\beta_1 = 0.40\)</span>, 표준오차 0.0444, p-value <span class="math inline">\(2.26\times10^{-19}\)</span>입니다. 그런데 그림을 보면 환자별 비율이 이항 95% 구간(오차 막대)보다 훨씬 넓게 흩어져 있고, 대조군 안에서도 0.088부터 0.199까지 벌어집니다. glm은 이 환자 간 변동을 모두 이항 잡음으로 취급하고 세포 14,143개를 독립 반복으로 셉니다. 그러나 질환 효과를 판단할 독립 단위는 <strong>환자 12명</strong>입니다. 이것이 <strong>가성반복(pseudoreplication)</strong>입니다. Squair et al.&nbsp;(2021, Nature Communications)은 단일세포 차등발현에서 세포를 독립 반복으로 다루는 방법들이 생물학적 반복 간 변동을 무시해 거짓 발견을 대량으로 만들고, 반복 단위별로 합친(pseudobulk) 방법이 이를 피한다는 것을 보였습니다. 세포유형 비율 비교에도 같은 논리가 적용됩니다. 질환 효과가 <strong>없는</strong> 가상 데이터로 직접 확인합니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">2</span>)   <span class="co"># beta1 = 0(질환 효과 없음)이지만 환자 간 변동 tau = 0.5는 있는 가상 데이터 200개</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>p_null <span class="ot">&lt;-</span> <span class="fu">t</span>(<span class="fu">replicate</span>(<span class="dv">200</span>, { y0 <span class="ot">&lt;-</span> <span class="fu">rbinom</span>(n_pat, n_cell, <span class="fu">plogis</span>(<span class="sc">-</span><span class="fl">1.7</span> <span class="sc">+</span> <span class="fu">rnorm</span>(n_pat, <span class="dv">0</span>, <span class="fl">0.5</span>)))</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">c</span>(<span class="at">glm_cell  =</span> <span class="fu">summary</span>(<span class="fu">glm</span>(<span class="fu">cbind</span>(y0, n_cell <span class="sc">-</span> y0) <span class="sc">~</span> disease, <span class="at">family =</span> binomial))<span class="sc">$</span>coefficients[<span class="dv">2</span>, <span class="dv">4</span>],</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">t_patient =</span> <span class="fu">t.test</span>(<span class="fu">qlogis</span>(y0 <span class="sc">/</span> n_cell) <span class="sc">~</span> disease)<span class="sc">$</span>p.value) }))   <span class="co"># 환자당 값 하나(로짓 비율)로 비교</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="fu">colMeans</span>(p_null <span class="sc">&lt;</span> <span class="fl">0.05</span>)                        <span class="co"># 명목 수준은 0.05</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code> glm_cell t_patient 
+    0.745     0.055 </code></pre>
+</div>
+</div>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Warning
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>효과가 없는데도 세포 단위 glm은 74.5%의 데이터셋에서 p &lt; 0.05를 냅니다. 환자당 값 하나로 요약해 비교하면 5.5%로 명목 수준 근처입니다(데이터셋 200개라 이 비율의 몬테카를로 표준오차는 약 1.5%p입니다). 가성반복은 베이지안이냐 빈도주의냐의 문제가 아니라 <strong>모형 구조</strong>의 문제입니다. 세포를 독립으로 둔 베이지안 이항 모형도 똑같이 과신하고, 빈도주의에서도 환자 랜덤효과를 넣은 일반화 선형 혼합모형이나 환자별 요약으로 고칩니다. 아래 계층 모형은 환자 효과 <span class="math inline">\(u_i\)</span>로 이 구조를 모형에 넣습니다.</p>
+</div>
+</div>
+</section>
+<section id="c-계층-모형과-표집기" class="level3">
+<h3 class="anchored" data-anchor-id="c-계층-모형과-표집기">(c) 계층 모형과 표집기</h3>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-4-contents" aria-controls="callout-4" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+수식으로 보기: 모형과 두 가지 모수화
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-4" class="callout-4-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p><span class="math display">\[
+\begin{aligned} &amp; y_i \sim \text{Binomial}(n_i, \theta_i), \quad \text{logit}\,\theta_i = a_i = \beta_0 + \beta_1 x_i + u_i, \quad u_i \sim \mathcal{N}(0, \tau^2) \\ &amp; \beta_0 \sim \mathcal{N}(-2, 1.5^2), \quad \beta_1 \sim \mathcal{N}(0, 1), \quad \tau \sim \text{Half-Normal}(0, 1) \end{aligned}
+\]</span> 중심화(centered)는 <span class="math inline">\((\beta_0, \beta_1, \log\tau, a_1, \dots, a_{12})\)</span>를, 비중심화(non-centered)는 <span class="math inline">\(a_i = \beta_0 + \beta_1 x_i + \tau\eta_i\)</span>, <span class="math inline">\(\eta_i \sim \mathcal{N}(0,1)\)</span>로 두고 <span class="math inline">\((\beta_0, \beta_1, \log\tau, \eta_1, \dots, \eta_{12})\)</span>를 표집합니다. 로그사후는 상수를 빼면 이항 로그가능도 <span class="math inline">\(\sum_i [y_i a_i - n_i \log(1 + e^{a_i})]\)</span>에 <span class="math inline">\(a\)</span>(또는 <span class="math inline">\(\eta\)</span>)와 <span class="math inline">\(\beta_0, \beta_1, \tau\)</span>의 로그 사전밀도, 그리고 <span class="math inline">\(\log\tau\)</span> 척도에서 표집하기 때문에 붙는 야코비안 <span class="math inline">\(\log\tau\)</span>를 더한 것입니다. <span class="math inline">\(e^{\beta_1}\)</span>은 <span class="math inline">\(u_i\)</span>를 고정한 조건부 오즈비, 곧 “같은 환자 효과를 가진 두 사람”의 오즈비입니다.</p>
+</div>
+</div>
+</div>
+<p>표집기는 <a href="../chapters/05_mcmc_basics.html">W5</a>의 확률보행 메트로폴리스를 한 번에 한 성분씩 적용하는 성분별(component-wise) 버전입니다. 모수 15개를 차례로 하나씩 움직입니다. 체인 4개를 서로 흩어진 초기값에서 시작하고, 체인당 4,000회 중 앞 1,000회를 워밍업으로 버립니다. 먼저 <a href="../chapters/07_hierarchical_modelcomp.html">W7</a>에서 권한 비중심화로 돌립니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>log_post_ccp <span class="ot">&lt;-</span> <span class="cf">function</span>(par, y, n_cell, x, <span class="at">centered =</span> <span class="cn">TRUE</span>) {</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  b0 <span class="ot">&lt;-</span> par[<span class="dv">1</span>]; b1 <span class="ot">&lt;-</span> par[<span class="dv">2</span>]; log_tau <span class="ot">&lt;-</span> par[<span class="dv">3</span>]; tau <span class="ot">&lt;-</span> <span class="fu">exp</span>(log_tau); z <span class="ot">&lt;-</span> par[<span class="sc">-</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>)]</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  mu <span class="ot">&lt;-</span> b0 <span class="sc">+</span> b1 <span class="sc">*</span> x                                          <span class="co"># 환자별 로짓의 평균</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (centered) { a <span class="ot">&lt;-</span> z; lp_u <span class="ot">&lt;-</span> <span class="fu">sum</span>(<span class="fu">dnorm</span>(a, mu, tau, <span class="at">log =</span> <span class="cn">TRUE</span>)) } <span class="cf">else</span> {   <span class="co"># 중심화: z = a_i</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    a <span class="ot">&lt;-</span> mu <span class="sc">+</span> tau <span class="sc">*</span> z; lp_u <span class="ot">&lt;-</span> <span class="fu">sum</span>(<span class="fu">dnorm</span>(z, <span class="dv">0</span>, <span class="dv">1</span>, <span class="at">log =</span> <span class="cn">TRUE</span>)) }                <span class="co"># 비중심화: z = eta_i</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sum</span>(y <span class="sc">*</span> a <span class="sc">-</span> n_cell <span class="sc">*</span> <span class="fu">log1p</span>(<span class="fu">exp</span>(a))) <span class="sc">+</span> lp_u <span class="sc">+</span> <span class="fu">dnorm</span>(b0, <span class="sc">-</span><span class="dv">2</span>, <span class="fl">1.5</span>, <span class="at">log =</span> <span class="cn">TRUE</span>) <span class="sc">+</span>   <span class="co"># 이항 가능도(상수 제외)</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">dnorm</span>(b1, <span class="dv">0</span>, <span class="dv">1</span>, <span class="at">log =</span> <span class="cn">TRUE</span>) <span class="sc">+</span> <span class="fu">dnorm</span>(tau, <span class="dv">0</span>, <span class="dv">1</span>, <span class="at">log =</span> <span class="cn">TRUE</span>) <span class="sc">+</span> log_tau          <span class="co"># 반정규 사전 + 야코비안</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>cw_metropolis <span class="ot">&lt;-</span> <span class="cf">function</span>(log_post, init, step, n_iter, ...) {   <span class="co"># 성분별 확률보행 메트로폴리스</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>  d <span class="ot">&lt;-</span> <span class="fu">length</span>(init); draws <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="cn">NA_real_</span>, n_iter, d); cur <span class="ot">&lt;-</span> init; lp_cur <span class="ot">&lt;-</span> <span class="fu">log_post</span>(cur, ...)</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>  <span class="cf">for</span> (it <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>n_iter) {</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>d) {                                         <span class="co"># k번째 성분만 움직인다</span></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>      prop <span class="ot">&lt;-</span> cur; prop[k] <span class="ot">&lt;-</span> cur[k] <span class="sc">+</span> <span class="fu">rnorm</span>(<span class="dv">1</span>, <span class="dv">0</span>, step[k]); lp_prop <span class="ot">&lt;-</span> <span class="fu">log_post</span>(prop, ...)</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>      <span class="cf">if</span> (<span class="fu">log</span>(<span class="fu">runif</span>(<span class="dv">1</span>)) <span class="sc">&lt;</span> lp_prop <span class="sc">-</span> lp_cur) { cur <span class="ot">&lt;-</span> prop; lp_cur <span class="ot">&lt;-</span> lp_prop } }</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>    draws[it, ] <span class="ot">&lt;-</span> cur }</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>  draws</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>run_ccp <span class="ot">&lt;-</span> <span class="cf">function</span>(inits, step, centered, y, n_cell, x, <span class="at">n_iter =</span> <span class="dv">4000</span>, <span class="at">n_warm =</span> <span class="dv">1000</span>, <span class="at">seed =</span> <span class="dv">1</span>) {</span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">set.seed</span>(seed)                                             <span class="co"># 반환: (반복 x 모수 x 체인) 배열, 워밍업 제외</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sapply</span>(inits, <span class="cf">function</span>(i0) <span class="fu">cw_metropolis</span>(log_post_ccp, i0, step, n_iter, <span class="at">y =</span> y, <span class="at">n_cell =</span> n_cell,</span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>                                           <span class="at">x =</span> x, <span class="at">centered =</span> centered)[<span class="sc">-</span>(<span class="dv">1</span><span class="sc">:</span>n_warm), ], <span class="at">simplify =</span> <span class="st">"array"</span>)</span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>start_b <span class="ot">&lt;-</span> <span class="fu">rbind</span>(<span class="fu">c</span>(<span class="sc">-</span><span class="dv">4</span>, <span class="sc">-</span><span class="dv">1</span>, <span class="fu">log</span>(<span class="fl">0.2</span>)), <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>, <span class="fu">log</span>(<span class="dv">2</span>)), <span class="fu">c</span>(<span class="sc">-</span><span class="dv">1</span>, <span class="fl">0.5</span>, <span class="dv">0</span>), <span class="fu">c</span>(<span class="sc">-</span><span class="dv">3</span>, <span class="sc">-</span><span class="fl">0.5</span>, <span class="fu">log</span>(<span class="fl">0.5</span>)))  <span class="co"># 흩어진 초기값</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">5</span>); inits_nc <span class="ot">&lt;-</span> <span class="fu">lapply</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>, <span class="cf">function</span>(j) <span class="fu">c</span>(start_b[j, ], <span class="fu">rnorm</span>(n_pat)))</span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>arr_nc <span class="ot">&lt;-</span> <span class="fu">run_ccp</span>(inits_nc, <span class="fu">c</span>(<span class="fl">0.1</span>, <span class="fl">0.15</span>, <span class="fl">0.1</span>, <span class="fu">rep</span>(<span class="fl">0.3</span>, n_pat)), <span class="at">centered =</span> <span class="cn">FALSE</span>, y, n_cell, disease)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="d-수렴-진단" class="level3">
+<h3 class="anchored" data-anchor-id="d-수렴-진단">(d) 수렴 진단</h3>
+<p>진단 함수는 <a href="../chapters/06_hmc_diagnostics.html">W6</a>의 코드를 한 글자도 바꾸지 않고 복사합니다. 기준은 Vehtari et al.&nbsp;(2021, Bayesian Analysis)의 권고인 R-hat &lt; 1.01, 그리고 체인 4개 기준 bulk-ESS 400 이상(체인당 약 100)입니다. W6의 함수들은 순위 정규화(rank normalization)를 하지 않은 기본형이라 <code>posterior</code> 패키지의 <code>rhat</code>, <code>ess_bulk</code>와 값이 조금 다를 수 있습니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># split-R-hat: 각 체인을 반으로 쪼개 체인 수를 2배로 만든 뒤 계산합니다</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>split_rhat <span class="ot">&lt;-</span> <span class="cf">function</span>(sims) {</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>  sims <span class="ot">&lt;-</span> <span class="fu">as.matrix</span>(sims); n <span class="ot">&lt;-</span> <span class="fu">nrow</span>(sims); h <span class="ot">&lt;-</span> <span class="fu">floor</span>(n <span class="sc">/</span> <span class="dv">2</span>)</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>  sp <span class="ot">&lt;-</span> <span class="fu">cbind</span>(sims[<span class="dv">1</span><span class="sc">:</span>h, , <span class="at">drop =</span> <span class="cn">FALSE</span>], sims[(n <span class="sc">-</span> h <span class="sc">+</span> <span class="dv">1</span>)<span class="sc">:</span>n, , <span class="at">drop =</span> <span class="cn">FALSE</span>])</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>  n_s <span class="ot">&lt;-</span> <span class="fu">nrow</span>(sp)</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>  w <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">apply</span>(sp, <span class="dv">2</span>, var))                 <span class="co"># 체인 내 분산 W</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>  b <span class="ot">&lt;-</span> n_s <span class="sc">*</span> <span class="fu">var</span>(<span class="fu">colMeans</span>(sp))                 <span class="co"># 체인 간 분산 B</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sqrt</span>((((n_s <span class="sc">-</span> <span class="dv">1</span>) <span class="sc">/</span> n_s) <span class="sc">*</span> w <span class="sc">+</span> b <span class="sc">/</span> n_s) <span class="sc">/</span> w)</span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>var_plus_hat <span class="ot">&lt;-</span> <span class="cf">function</span>(sims) {               <span class="co"># W 와 체인 간 분산을 섞은 var^+</span></span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a>  sims <span class="ot">&lt;-</span> <span class="fu">as.matrix</span>(sims); n <span class="ot">&lt;-</span> <span class="fu">nrow</span>(sims); m <span class="ot">&lt;-</span> <span class="fu">ncol</span>(sims)</span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a>  ((n <span class="sc">-</span> <span class="dv">1</span>) <span class="sc">/</span> n) <span class="sc">*</span> <span class="fu">mean</span>(<span class="fu">apply</span>(sims, <span class="dv">2</span>, var)) <span class="sc">+</span> <span class="cf">if</span> (m <span class="sc">&gt;</span> <span class="dv">1</span>) <span class="fu">var</span>(<span class="fu">colMeans</span>(sims)) <span class="cf">else</span> <span class="dv">0</span></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="co"># ESS: split + 시차 0부터 둘씩 묶은 Geyer 초기 단조 수열</span></span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a>ess_basic <span class="ot">&lt;-</span> <span class="cf">function</span>(sims) {</span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>  sims <span class="ot">&lt;-</span> <span class="fu">as.matrix</span>(sims); n0 <span class="ot">&lt;-</span> <span class="fu">nrow</span>(sims); h <span class="ot">&lt;-</span> <span class="fu">floor</span>(n0 <span class="sc">/</span> <span class="dv">2</span>)</span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a>  sp <span class="ot">&lt;-</span> <span class="fu">cbind</span>(sims[<span class="dv">1</span><span class="sc">:</span>h, , <span class="at">drop =</span> <span class="cn">FALSE</span>], sims[(n0 <span class="sc">-</span> h <span class="sc">+</span> <span class="dv">1</span>)<span class="sc">:</span>n0, , <span class="at">drop =</span> <span class="cn">FALSE</span>])  <span class="co"># split</span></span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a>  n <span class="ot">&lt;-</span> <span class="fu">nrow</span>(sp); m <span class="ot">&lt;-</span> <span class="fu">ncol</span>(sp); w <span class="ot">&lt;-</span> <span class="fu">mean</span>(<span class="fu">apply</span>(sp, <span class="dv">2</span>, var)); var_plus <span class="ot">&lt;-</span> <span class="fu">var_plus_hat</span>(sp)</span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.finite</span>(var_plus) <span class="sc">||</span> var_plus <span class="sc">&lt;=</span> <span class="dv">0</span>) <span class="fu">return</span>(<span class="cn">NA_real_</span>)</span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>  acov <span class="ot">&lt;-</span> <span class="fu">sapply</span>(<span class="fu">seq_len</span>(m), <span class="cf">function</span>(j)      <span class="co"># 체인별 자기공분산을 시차 n-1 까지</span></span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a>    <span class="fu">acf</span>(sp[, j], <span class="at">lag.max =</span> n <span class="sc">-</span> <span class="dv">1</span>, <span class="at">type =</span> <span class="st">"covariance"</span>, <span class="at">plot =</span> <span class="cn">FALSE</span>)<span class="sc">$</span>acf[, <span class="dv">1</span>, <span class="dv">1</span>])</span>
+<span id="cb13-22"><a href="#cb13-22" aria-hidden="true" tabindex="-1"></a>  rho <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">-</span> (w <span class="sc">-</span> <span class="fu">rowMeans</span>(<span class="fu">as.matrix</span>(acov))) <span class="sc">/</span> var_plus   <span class="co"># rho[k] 는 시차 k-1 의 자기상관</span></span>
+<span id="cb13-23"><a href="#cb13-23" aria-hidden="true" tabindex="-1"></a>  n_pair <span class="ot">&lt;-</span> <span class="fu">floor</span>(<span class="fu">length</span>(rho) <span class="sc">/</span> <span class="dv">2</span>)                        <span class="co"># 시차 0부터 둘씩: (r0+r1), (r2+r3), ...</span></span>
+<span id="cb13-24"><a href="#cb13-24" aria-hidden="true" tabindex="-1"></a>  pair <span class="ot">&lt;-</span> <span class="fu">cummin</span>(rho[<span class="dv">2</span> <span class="sc">*</span> (<span class="dv">1</span><span class="sc">:</span>n_pair) <span class="sc">-</span> <span class="dv">1</span>] <span class="sc">+</span> rho[<span class="dv">2</span> <span class="sc">*</span> (<span class="dv">1</span><span class="sc">:</span>n_pair)])   <span class="co"># 초기 단조 수열</span></span>
+<span id="cb13-25"><a href="#cb13-25" aria-hidden="true" tabindex="-1"></a>  keep <span class="ot">&lt;-</span> <span class="fu">which</span>(pair <span class="sc">&lt;</span> <span class="dv">0</span>)[<span class="dv">1</span>] <span class="sc">-</span> <span class="dv">1</span>; <span class="cf">if</span> (<span class="fu">is.na</span>(keep)) keep <span class="ot">&lt;-</span> n_pair  <span class="co"># 첫 음수 직전까지</span></span>
+<span id="cb13-26"><a href="#cb13-26" aria-hidden="true" tabindex="-1"></a>  tau <span class="ot">&lt;-</span> <span class="sc">-</span><span class="dv">1</span> <span class="sc">+</span> <span class="dv">2</span> <span class="sc">*</span> (<span class="cf">if</span> (keep <span class="sc">&gt;=</span> <span class="dv">1</span>) <span class="fu">sum</span>(pair[<span class="dv">1</span><span class="sc">:</span>keep]) <span class="cf">else</span> <span class="dv">0</span>)</span>
+<span id="cb13-27"><a href="#cb13-27" aria-hidden="true" tabindex="-1"></a>  m <span class="sc">*</span> n <span class="sc">/</span> <span class="fu">max</span>(tau, <span class="dv">1</span> <span class="sc">/</span> <span class="fu">log10</span>(m <span class="sc">*</span> n))          <span class="co"># mn / tau. 상한 없음(반상관이면 ESS &gt; mn)</span></span>
+<span id="cb13-28"><a href="#cb13-28" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb13-29"><a href="#cb13-29" aria-hidden="true" tabindex="-1"></a>diag_tab <span class="ot">&lt;-</span> <span class="cf">function</span>(arr) <span class="fu">t</span>(<span class="fu">sapply</span>(<span class="fu">c</span>(<span class="at">beta0 =</span> <span class="dv">1</span>, <span class="at">beta1 =</span> <span class="dv">2</span>, <span class="at">log_tau =</span> <span class="dv">3</span>), <span class="cf">function</span>(k) <span class="fu">c</span>(<span class="at">rhat =</span> <span class="fu">split_rhat</span>(arr[, k, ]), <span class="at">ess =</span> <span class="fu">ess_basic</span>(arr[, k, ]))))</span>
+<span id="cb13-30"><a href="#cb13-30" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">diag_tab</span>(arr_nc), <span class="dv">3</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>         rhat    ess
+beta0   1.343  9.699
+beta1   1.149 19.425
+log_tau 1.070 63.429</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">range</span>(<span class="dv">1</span> <span class="sc">/</span> <span class="fu">sqrt</span>(y <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> y <span class="sc">/</span> n_cell))), <span class="dv">2</span>)   <span class="co"># 환자별 로짓 a_i의 대략적 표준오차 범위</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 0.05 0.13</code></pre>
+</div>
+</div>
+<p>비중심화는 기준을 크게 벗어납니다. R-hat이 1.343, 1.149, 1.070이고 <span class="math inline">\(\beta_0\)</span>의 ESS는 표본 12,000개 중 약 10개입니다. 이유는 데이터에 있습니다. 환자마다 세포가 수백~수천 개라 환자별 로짓 <span class="math inline">\(a_i\)</span>는 데이터만으로 표준오차 0.05~0.13 안에 못 박힙니다. 비중심화 좌표에서 <span class="math inline">\(\beta_0\)</span> 하나만 움직이면 12개의 <span class="math inline">\(a_i\)</span>가 한꺼번에 움직여 기각되므로, <span class="math inline">\(\beta_0\)</span>와 <span class="math inline">\(\eta_i\)</span>가 함께 움직여야만 하는 좁은 능선이 생깁니다. 한 번에 한 성분씩 움직이는 표집기는 이런 능선에서 기어갑니다(<a href="../chapters/05_mcmc_basics.html">W5</a>에서 본, 상관이 크면 깁스가 기어가는 현상). 제안폭을 키우거나 줄여서는 풀리지 않는 기하의 문제입니다. <a href="../chapters/07_hierarchical_modelcomp.html">W7</a>에서 적었듯 그룹별 자료가 많으면 중심화가 낫습니다. 중심화에서는 <span class="math inline">\(a_i\)</span>가 각자 자기 데이터로 정해지고, <span class="math inline">\((\beta_0, \beta_1, \tau)\)</span>는 12개의 <span class="math inline">\(a_i\)</span>에 대한 정규 회귀처럼 움직입니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">6</span>); inits_c <span class="ot">&lt;-</span> <span class="fu">lapply</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>, <span class="cf">function</span>(j) <span class="fu">c</span>(start_b[j, ], <span class="fu">qlogis</span>(y <span class="sc">/</span> n_cell) <span class="sc">+</span> <span class="fu">rnorm</span>(n_pat, <span class="dv">0</span>, <span class="fl">0.5</span>)))</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>arr_c <span class="ot">&lt;-</span> <span class="fu">run_ccp</span>(inits_c, <span class="fu">c</span>(<span class="fl">0.5</span>, <span class="fl">0.6</span>, <span class="fl">0.6</span>, <span class="fu">rep</span>(<span class="fl">0.2</span>, n_pat)), <span class="at">centered =</span> <span class="cn">TRUE</span>, y, n_cell, disease)</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">diag_tab</span>(arr_c), <span class="dv">3</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>         rhat      ess
+beta0   1.003 1008.112
+beta1   1.004  964.097
+log_tau 1.004 1565.174</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>chain_cols <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"#1a6e3c"</span>, <span class="st">"#c0392b"</span>, <span class="st">"#2c7fb8"</span>, <span class="st">"grey60"</span>); lab <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"beta1"</span>, <span class="st">"log tau"</span>); <span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">2</span>))</span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="dv">2</span><span class="sc">:</span><span class="dv">3</span>) <span class="cf">for</span> (m <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>) <span class="fu">matplot</span>(<span class="fu">list</span>(arr_nc, arr_c)[[m]][, k, ], <span class="at">type =</span> <span class="st">"l"</span>, <span class="at">lty =</span> <span class="dv">1</span>, <span class="at">col =</span> chain_cols, <span class="at">ylab =</span> lab[k <span class="sc">-</span> <span class="dv">1</span>],</span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">ylim =</span> <span class="fu">range</span>(arr_nc[, k, ], arr_c[, k, ]), <span class="at">xlab =</span> <span class="st">"반복 (워밍업 이후)"</span>, <span class="at">main =</span> <span class="fu">paste0</span>(<span class="fu">c</span>(<span class="st">"비중심화: "</span>, <span class="st">"중심화: "</span>)[m], lab[k <span class="sc">-</span> <span class="dv">1</span>]))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="13_capstone_files/figure-html/unnamed-chunk-7-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>같은 표집기, 같은 반복 수에서(제안 폭과 초기값은 각 모수화에 맞게 따로 정함) 중심화는 R-hat이 모두 1.004 이하, ESS가 964 이상으로 기준을 통과합니다. 트레이스에서도 비중심화의 네 체인은 천천히 표류하며 한동안 서로 다른 높이에 머물고, 중심화의 네 체인은 같은 띠를 빠르게 섞어 덮습니다.</p>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Tip
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>모수화는 정답이 하나로 정해져 있지 않습니다. <span class="math inline">\(\tau\)</span>가 0 근처이거나 그룹별 자료가 적으면 비중심화가(<a href="../chapters/07_hierarchical_modelcomp.html">W7</a>), 그룹별 자료가 많아 각 그룹 모수가 데이터로 잘 정해지면 중심화가 낫습니다(이번 예제). 어느 쪽인지 미리 모를 때 알려 주는 것이 수렴 진단입니다. 흩어진 초기값의 여러 체인이 없었다면 이 실패를 알아채기 어려웠을 것입니다.</p>
+</div>
+</div>
+</section>
+<section id="e-사후예측검사-환자-간-과산포" class="level3">
+<h3 class="anchored" data-anchor-id="e-사후예측검사-환자-간-과산포">(e) 사후예측검사: 환자 간 과산포</h3>
+<p>검정통계량은 군별 합동 비율 주변의 피어슨 카이제곱입니다. 데이터가 순수한 이항이면 대략 자유도 <span class="math inline">\(12 - 2 = 10\)</span> 근처 값이 나옵니다. 단순 이항 모형의 사후는 평평한 사전 하 라플라스 근사(<a href="../chapters/04_approximation.html">W4</a>), 곧 <span class="math inline">\(\mathcal{N}(\hat\beta, \widehat{\text{Var}}(\hat\beta))\)</span>에서 뽑습니다. 계층 모형은 사후 표본마다 <strong>새 환자 효과</strong>를 뽑아 재현합니다. 같은 환자의 <span class="math inline">\(a_i\)</span>를 그대로 쓰면 관측 비율을 거의 복사하므로 환자 간 변동을 검사하는 힘이 약합니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>disp_stat <span class="ot">&lt;-</span> <span class="cf">function</span>(y, n_cell, x) { p_g <span class="ot">&lt;-</span> <span class="fu">ave</span>(y, x, <span class="at">FUN =</span> sum) <span class="sc">/</span> <span class="fu">ave</span>(n_cell, x, <span class="at">FUN =</span> sum)   <span class="co"># 군별 합동 비율</span></span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sum</span>((y <span class="sc">-</span> n_cell <span class="sc">*</span> p_g)<span class="sc">^</span><span class="dv">2</span> <span class="sc">/</span> (n_cell <span class="sc">*</span> p_g <span class="sc">*</span> (<span class="dv">1</span> <span class="sc">-</span> p_g))) }                                         <span class="co"># 피어슨 카이제곱</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>t_obs <span class="ot">&lt;-</span> <span class="fu">disp_stat</span>(y, n_cell, disease); post <span class="ot">&lt;-</span> <span class="fu">apply</span>(arr_c, <span class="dv">2</span>, c)   <span class="co"># 네 체인을 합친 사후 표본</span></span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">3</span>); n_rep <span class="ot">&lt;-</span> <span class="dv">1000</span>                       <span class="co"># 단순 이항 모형의 사후: N(glm 추정치, vcov)</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>b_glm <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">rnorm</span>(<span class="dv">2</span> <span class="sc">*</span> n_rep), n_rep) <span class="sc">%*%</span> <span class="fu">chol</span>(<span class="fu">vcov</span>(fit_glm)) <span class="sc">+</span> <span class="fu">matrix</span>(<span class="fu">coef</span>(fit_glm), n_rep, <span class="dv">2</span>, <span class="at">byrow =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>t_glm <span class="ot">&lt;-</span> <span class="fu">apply</span>(b_glm, <span class="dv">1</span>, <span class="cf">function</span>(b) <span class="fu">disp_stat</span>(<span class="fu">rbinom</span>(n_pat, n_cell, <span class="fu">plogis</span>(b[<span class="dv">1</span>] <span class="sc">+</span> b[<span class="dv">2</span>] <span class="sc">*</span> disease)), n_cell, disease))</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>t_hier <span class="ot">&lt;-</span> <span class="fu">sapply</span>(<span class="fu">sample</span>(<span class="fu">nrow</span>(post), n_rep), <span class="cf">function</span>(s) {          <span class="co"># 계층 모형: 새 환자 효과로 재현</span></span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>  a_new <span class="ot">&lt;-</span> post[s, <span class="dv">1</span>] <span class="sc">+</span> post[s, <span class="dv">2</span>] <span class="sc">*</span> disease <span class="sc">+</span> <span class="fu">exp</span>(post[s, <span class="dv">3</span>]) <span class="sc">*</span> <span class="fu">rnorm</span>(n_pat)</span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">disp_stat</span>(<span class="fu">rbinom</span>(n_pat, n_cell, <span class="fu">plogis</span>(a_new)), n_cell, disease) })</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">c</span>(<span class="at">T_obs =</span> t_obs, <span class="at">median_glm =</span> <span class="fu">median</span>(t_glm), <span class="at">max_glm =</span> <span class="fu">max</span>(t_glm), <span class="at">p_glm =</span> <span class="fu">mean</span>(t_glm <span class="sc">&gt;=</span> t_obs), <span class="at">p_hier =</span> <span class="fu">mean</span>(t_hier <span class="sc">&gt;=</span> t_obs)), <span class="dv">3</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>     T_obs median_glm    max_glm      p_glm     p_hier 
+   366.028      9.311     30.557      0.000      0.463 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb22"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>)); xr <span class="ot">&lt;-</span> <span class="fu">range</span>(<span class="fu">log10</span>(<span class="fu">c</span>(t_glm, t_hier, t_obs)))</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (m <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>) { <span class="fu">hist</span>(<span class="fu">log10</span>(<span class="fu">list</span>(t_glm, t_hier)[[m]]), <span class="at">breaks =</span> <span class="dv">30</span>, <span class="at">xlim =</span> xr, <span class="at">col =</span> <span class="st">"grey85"</span>, <span class="at">border =</span> <span class="st">"white"</span>,</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>                      <span class="at">main =</span> <span class="fu">c</span>(<span class="st">"단순 이항 모형"</span>, <span class="st">"계층 모형 (새 환자)"</span>)[m], <span class="at">xlab =</span> <span class="st">"log10 T(y_rep)"</span>, <span class="at">ylab =</span> <span class="st">"빈도"</span>)</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">abline</span>(<span class="at">v =</span> <span class="fu">log10</span>(t_obs), <span class="at">col =</span> <span class="st">"#c0392b"</span>, <span class="at">lwd =</span> <span class="dv">2</span>) }                <span class="co"># 빨간 선이 관측값 T(y)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="13_capstone_files/figure-html/unnamed-chunk-8-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>관측값은 <span class="math inline">\(T(y) = 366.0\)</span>입니다. 단순 이항 모형이 만든 가짜 데이터 1,000개는 중앙값 9.3, 최댓값 30.6으로 한 번도 관측값에 닿지 못합니다(베이지안 p-value 0.000). 계층 모형의 사후예측분포는 관측값을 가운데 두고(p = 0.463) 넓게 퍼져 있습니다. 단순 이항 모형은 데이터의 가장 중요한 특성인 환자 간 변동을 재현하지 못하므로, 그 모형의 p-value는 해석할 이유가 없습니다.</p>
+</section>
+<section id="f-결과-질환-효과-beta_1" class="level3">
+<h3 class="anchored" data-anchor-id="f-결과-질환-효과-beta_1">(f) 결과: 질환 효과 <span class="math inline">\(\beta_1\)</span></h3>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a>b1_d <span class="ot">&lt;-</span> post[, <span class="dv">2</span>]; tau_d <span class="ot">&lt;-</span> <span class="fu">exp</span>(post[, <span class="dv">3</span>]); summ <span class="ot">&lt;-</span> <span class="cf">function</span>(v) <span class="fu">quantile</span>(v, <span class="fu">c</span>(<span class="fl">0.5</span>, <span class="fl">0.025</span>, <span class="fl">0.975</span>))</span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">cbind</span>(<span class="fu">rbind</span>(<span class="at">beta0 =</span> <span class="fu">summ</span>(post[, <span class="dv">1</span>]), <span class="at">beta1 =</span> <span class="fu">summ</span>(b1_d), <span class="at">tau =</span> <span class="fu">summ</span>(tau_d)), <span class="at">true =</span> <span class="fu">c</span>(b0_true, b1_true, tau_true)), <span class="dv">3</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>         50%   2.5%  97.5% true
+beta0 -1.790 -2.233 -1.381 -1.7
+beta1  0.415 -0.194  0.997  0.4
+tau    0.492  0.322  0.832  0.5</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb25"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>se_g <span class="ot">&lt;-</span> <span class="fu">sqrt</span>(<span class="fu">vcov</span>(fit_glm)[<span class="dv">2</span>, <span class="dv">2</span>]); est_g <span class="ot">&lt;-</span> <span class="fu">coef</span>(fit_glm)[<span class="dv">2</span>] <span class="sc">+</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="sc">-</span><span class="fl">1.96</span>, <span class="fl">1.96</span>) <span class="sc">*</span> se_g   <span class="co"># glm 추정치와 95% 신뢰구간</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a>cmp <span class="ot">&lt;-</span> <span class="fu">rbind</span>(<span class="at">hierarchical =</span> <span class="fu">c</span>(<span class="fu">summ</span>(b1_d), <span class="fu">exp</span>(<span class="fu">summ</span>(b1_d))), <span class="at">cell_glm =</span> <span class="fu">c</span>(est_g, <span class="fu">exp</span>(est_g)))</span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a><span class="fu">colnames</span>(cmp) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"beta1"</span>, <span class="st">"lower"</span>, <span class="st">"upper"</span>, <span class="st">"OR"</span>, <span class="st">"OR_lower"</span>, <span class="st">"OR_upper"</span>); <span class="fu">round</span>(cmp, <span class="dv">3</span>); <span class="fu">round</span>(<span class="fu">c</span>(<span class="at">pr_beta1_pos =</span> <span class="fu">mean</span>(b1_d <span class="sc">&gt;</span> <span class="dv">0</span>)), <span class="dv">3</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>             beta1  lower upper    OR OR_lower OR_upper
+hierarchical 0.415 -0.194 0.997 1.514    0.823    2.711
+cell_glm     0.400  0.313 0.487 1.491    1.367    1.627</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>pr_beta1_pos 
+       0.925 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb28"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="fu">hist</span>(b1_d, <span class="at">breaks =</span> <span class="dv">60</span>, <span class="at">freq =</span> <span class="cn">FALSE</span>, <span class="at">col =</span> <span class="st">"grey85"</span>, <span class="at">border =</span> <span class="st">"white"</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="fl">0.8</span>, <span class="fl">1.6</span>), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">1.05</span> <span class="sc">*</span> <span class="fu">dnorm</span>(<span class="dv">0</span>, <span class="dv">0</span>, se_g)),</span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"beta1: 계층 모형의 사후분포 대 세포 단위 glm"</span>, <span class="at">xlab =</span> <span class="st">"beta1 (로짓 차이)"</span>, <span class="at">ylab =</span> <span class="st">"밀도"</span>)</span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a><span class="fu">curve</span>(<span class="fu">dnorm</span>(x, <span class="fu">coef</span>(fit_glm)[<span class="dv">2</span>], se_g), <span class="at">add =</span> <span class="cn">TRUE</span>, <span class="at">col =</span> <span class="st">"#c0392b"</span>, <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a><span class="fu">abline</span>(<span class="at">v =</span> <span class="fu">c</span>(<span class="dv">0</span>, b1_true), <span class="at">lty =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">3</span>), <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"grey30"</span>, <span class="st">"#1a6e3c"</span>), <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"topleft"</span>, <span class="at">bty =</span> <span class="st">"n"</span>, <span class="at">cex =</span> <span class="fl">0.8</span>, <span class="at">legend =</span> <span class="fu">c</span>(<span class="st">"계층 모형 사후분포"</span>, <span class="st">"glm 정규 근사"</span>, <span class="st">"0"</span>, <span class="st">"참값 0.4"</span>), <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"grey60"</span>, <span class="st">"#c0392b"</span>, <span class="st">"grey30"</span>, <span class="st">"#1a6e3c"</span>), <span class="at">lwd =</span> <span class="fu">c</span>(<span class="dv">8</span>, <span class="dv">2</span>, <span class="dv">2</span>, <span class="dv">2</span>), <span class="at">lty =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="13_capstone_files/figure-html/unnamed-chunk-9-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>점추정은 두 방법이 거의 같지만(0.415 대 0.400) 불확실성은 전혀 다릅니다. 계층 모형의 95% 신용구간은 <span class="math inline">\(-0.194\)</span>~<span class="math inline">\(0.997\)</span>, 오즈비로 0.82~2.71이고, glm의 95% 신뢰구간(오즈비 1.37~1.63)보다 몇 배 넓습니다. <span class="math inline">\(\Pr(\beta_1 &gt; 0 \mid y) = 0.925\)</span>이므로 “질환군에서 이 세포유형 비율이 높을 가능성이 크지만, 환자 12명으로는 효과가 없거나 작을 가능성을 배제할 수 없다”가 데이터가 말하는 전부입니다. 참값 <span class="math inline">\((\beta_0, \beta_1, \tau) = (-1.7, 0.4, 0.5)\)</span>는 모두 95% 구간 안에 있습니다. 데이터 한 벌로 한 이 확인이 워크플로우 4단계의 가장 단순한 형태이고, 사전에서 참값을 여러 번 뽑아 같은 확인을 반복하면서 참값의 사후 순위가 균등한지 보는 것이 SBC(simulation-based calibration; Talts et al.&nbsp;2018)입니다.</p>
+</section>
+<section id="g-민감도-분석" class="level3">
+<h3 class="anchored" data-anchor-id="g-민감도-분석">(g) 민감도 분석</h3>
+<p>사전분포만 바꾸고 가능도는 그대로면 다시 돌리지 않아도 됩니다. 기존 사후 표본에 가중치 <span class="math inline">\(w \propto p_{\text{new}}(\theta) / p_{\text{old}}(\theta)\)</span>를 주는 중요도 재가중(<a href="../chapters/04_approximation.html">W4</a>의 중요도표집)으로 새 사후를 얻습니다. 가중치가 한쪽으로 쏠리면(가중치 ESS가 작으면) 이 근사를 믿을 수 없으므로 그때는 다시 돌려야 합니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb29"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>wq <span class="ot">&lt;-</span> <span class="cf">function</span>(v, w, p) { o <span class="ot">&lt;-</span> <span class="fu">order</span>(v); cw <span class="ot">&lt;-</span> <span class="fu">cumsum</span>(w[o]); <span class="fu">sapply</span>(p, <span class="cf">function</span>(q) v[o][<span class="fu">which</span>(cw <span class="sc">&gt;=</span> q)[<span class="dv">1</span>]]) }  <span class="co"># 가중 분위수</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>sens_row <span class="ot">&lt;-</span> <span class="cf">function</span>(s_tau, s_b1) {             <span class="co"># 새 사전(척도 s_tau, s_b1) / 기존 사전(척도 1, 1)</span></span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>  lw <span class="ot">&lt;-</span> <span class="fu">dnorm</span>(tau_d, <span class="dv">0</span>, s_tau, <span class="at">log =</span> <span class="cn">TRUE</span>) <span class="sc">-</span> <span class="fu">dnorm</span>(tau_d, <span class="dv">0</span>, <span class="dv">1</span>, <span class="at">log =</span> <span class="cn">TRUE</span>) <span class="sc">+</span> <span class="fu">dnorm</span>(b1_d, <span class="dv">0</span>, s_b1, <span class="at">log =</span> <span class="cn">TRUE</span>) <span class="sc">-</span> <span class="fu">dnorm</span>(b1_d, <span class="dv">0</span>, <span class="dv">1</span>, <span class="at">log =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>  w <span class="ot">&lt;-</span> <span class="fu">exp</span>(lw <span class="sc">-</span> <span class="fu">max</span>(lw)); w <span class="ot">&lt;-</span> w <span class="sc">/</span> <span class="fu">sum</span>(w)       <span class="co"># 정규화된 중요도 가중치</span></span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">c</span>(<span class="at">tau_scale =</span> s_tau, <span class="at">b1_scale =</span> s_b1, <span class="at">median =</span> <span class="fu">wq</span>(b1_d, w, <span class="fl">0.5</span>), <span class="at">lower =</span> <span class="fu">wq</span>(b1_d, w, <span class="fl">0.025</span>), <span class="at">upper =</span> <span class="fu">wq</span>(b1_d, w, <span class="fl">0.975</span>),</span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">pr_pos =</span> <span class="fu">sum</span>(w <span class="sc">*</span> (b1_d <span class="sc">&gt;</span> <span class="dv">0</span>)), <span class="at">ess_w =</span> <span class="dv">1</span> <span class="sc">/</span> <span class="fu">sum</span>(w<span class="sc">^</span><span class="dv">2</span>))</span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">rbind</span>(<span class="fu">sens_row</span>(<span class="fl">0.5</span>, <span class="dv">1</span>), <span class="fu">sens_row</span>(<span class="dv">1</span>, <span class="dv">1</span>), <span class="fu">sens_row</span>(<span class="dv">2</span>, <span class="dv">1</span>), <span class="fu">sens_row</span>(<span class="dv">1</span>, <span class="fl">0.5</span>), <span class="fu">sens_row</span>(<span class="dv">1</span>, <span class="dv">2</span>), <span class="fu">sens_row</span>(<span class="dv">1</span>, <span class="dv">10</span>)), <span class="dv">3</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>     tau_scale b1_scale median  lower upper pr_pos    ess_w
+[1,]       0.5      1.0  0.418 -0.142 0.974  0.935 11578.11
+[2,]       1.0      1.0  0.415 -0.194 0.998  0.925 12000.00
+[3,]       2.0      1.0  0.414 -0.200 0.999  0.922 11953.80
+[4,]       1.0      0.5  0.338 -0.209 0.839  0.903 10957.67
+[5,]       1.0      2.0  0.442 -0.188 1.046  0.931 11840.99
+[6,]       1.0     10.0  0.450 -0.175 1.070  0.933 11702.10</code></pre>
+</div>
+</div>
+<p><span class="math inline">\(\tau\)</span> 사전 척도를 0.5~2로 바꿔도 <span class="math inline">\(\Pr(\beta_1 &gt; 0 \mid y)\)</span>는 0.922~0.935에서 움직입니다. <span class="math inline">\(\beta_1\)</span> 사전 척도를 0.5로 좁히면 중앙값이 0.415에서 0.338로 0 쪽으로 당겨지지만, 척도 10까지 넓혀도 결론은 같습니다. 가중치 ESS는 모두 12,000개 중 10,900개 이상이라 재가중 근사도 믿을 만합니다. 이 표를 논문 부록에 그대로 싣습니다.</p>
+</section>
+</section>
+<section id="모델-점검-체크리스트" class="level2">
+<h2 class="anchored" data-anchor-id="모델-점검-체크리스트">모델 점검 체크리스트</h2>
+<p>이 챕터의 핵심 산출물입니다. 자기 데이터 분석의 각 시점에서 아래 항목에 답을 적어 두십시오.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>시점</th>
+<th>점검 항목</th>
+<th>이번 예제의 답</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>적합 전</td>
+<td>1. 추정 대상이 모수와 척도까지 한 문장으로 적혀 있는가</td>
+<td>질환 대 대조의 오즈비 <span class="math inline">\(e^{\beta_1}\)</span></td>
+</tr>
+<tr class="even">
+<td></td>
+<td>2. 관측 단위와 반복 단위가 맞는가(가성반복)</td>
+<td>세포 14,143개가 아니라 환자 12명</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td>3. 가능도가 데이터가 가질 수 있는 값과 분산 구조에 맞는가</td>
+<td>0~<span class="math inline">\(n_i\)</span> 정수 → 이항 + 환자 랜덤효과</td>
+</tr>
+<tr class="even">
+<td></td>
+<td>4. 사전예측이 도메인상 말이 되는가</td>
+<td><span class="math inline">\(\mathcal{N}(0, 10^2)\)</span>는 75%가 0 또는 1 근처 → 약정보 사전</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td>5. 참값을 아는 가짜 데이터에서 모수가 복원되는가</td>
+<td>세 모수 모두 95% 구간 안</td>
+</tr>
+<tr class="even">
+<td>적합 후</td>
+<td>6. 모든 관심 모수에서 R-hat &lt; 1.01, bulk-ESS(와 tail-ESS) ≥ 400, (HMC라면) 발산 전이 0인가</td>
+<td>중심화: R-hat ≤ 1.004, ESS ≥ 964 (순위 정규화 없는 기본형, tail-ESS는 미계산; 비중심화는 실패)</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td>7. 진단이 실패하면 반복 수보다 모수화·표집기를 먼저 의심했는가</td>
+<td>비중심화 → 중심화</td>
+</tr>
+<tr class="even">
+<td></td>
+<td>8. 중요한 통계량을 PPC로 재현하는가</td>
+<td>과산포: 이항 p = 0.000, 계층 p = 0.463</td>
+</tr>
+<tr class="odd">
+<td></td>
+<td>9. 사전을 바꿔도 결론이 유지되는가</td>
+<td><span class="math inline">\(\Pr(\beta_1&gt;0)\)</span> 0.903~0.935</td>
+</tr>
+<tr class="even">
+<td></td>
+<td>10. 모형 비교를 했다면 차이를 표준오차와 함께 보았는가</td>
+<td>이항 모형은 PPC에서 이미 탈락</td>
+</tr>
+<tr class="odd">
+<td>보고 전</td>
+<td>11. 사전분포와 근거, 표집 설정, 진단값을 모두 적었는가</td>
+<td>아래 방법 문단</td>
+</tr>
+<tr class="even">
+<td></td>
+<td>12. 효과를 p-value 하나가 아니라 크기와 불확실성으로 보고했는가</td>
+<td>오즈비 1.51 (0.82~2.71), <span class="math inline">\(\Pr(\beta_1&gt;0) = 0.925\)</span></td>
+</tr>
+<tr class="odd">
+<td></td>
+<td>13. 코드, 시드, R과 패키지 버전을 기록했는가</td>
+<td><code>set.seed()</code>, <code>sessionInfo()</code></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="보고-템플릿" class="level2">
+<h2 class="anchored" data-anchor-id="보고-템플릿">보고 템플릿</h2>
+<p>Kruschke (2021, Nature Human Behaviour)의 베이지안 분석 보고 지침(BARG)을 참고해 이번 예제의 방법(Methods) 문단을 쓰면 다음과 같습니다. 결과 문단에는 <span class="math inline">\(\beta_1\)</span>의 사후 중앙값과 95% 신용구간, 오즈비, <span class="math inline">\(\Pr(\beta_1 &gt; 0 \mid y)\)</span>, 민감도 표를 싣습니다.</p>
+<blockquote class="blockquote">
+<p>환자별 관심 세포유형 수 <span class="math inline">\(y_i\)</span>를 전체 세포 수 <span class="math inline">\(n_i\)</span>에 대한 이항분포로 모형화하고, 로짓 비율에 질환 여부의 고정효과 <span class="math inline">\(\beta_1\)</span>과 환자 랜덤효과 <span class="math inline">\(u_i \sim \mathcal{N}(0, \tau^2)\)</span>를 두었다. 사전분포는 <span class="math inline">\(\beta_0 \sim \mathcal{N}(-2, 1.5^2)\)</span>(대조군 비율 약 12%, 0.7%~73% 허용), <span class="math inline">\(\beta_1 \sim \mathcal{N}(0, 1)\)</span>(오즈비 95% 사전 범위 0.14~7.1), <span class="math inline">\(\tau \sim \text{Half-Normal}(0, 1)\)</span>로 정했고, 사전예측 비율이 도메인상 타당한 범위에 있음을 확인했다. 사후분포는 성분별 확률보행 메트로폴리스로 중심화 모수화에서 4개 체인, 체인당 4,000회(앞 1,000회 워밍업 제외)를 흩어진 초기값에서 표집했다. <span class="math inline">\(\beta_0, \beta_1, \log\tau\)</span>에서 순위 정규화를 하지 않은 split-R-hat ≤ 1.004, ESS ≥ 964로 Vehtari et al.&nbsp;(2021)의 기준(R-hat &lt; 1.01, ESS ≥ 400)을 충족했다. 사후예측검사에서 환자 간 과산포 통계량은 계층 모형에서 재현되었고(베이지안 p = 0.46) 세포 단위 이항 모형에서는 재현되지 않았다. <span class="math inline">\(\tau\)</span>의 사전 척도를 0.5~2, <span class="math inline">\(\beta_1\)</span>의 사전 척도를 0.5~10 범위에서 바꾼 민감도 분석(중요도 재가중)에서 <span class="math inline">\(\Pr(\beta_1 &gt; 0 \mid y)\)</span>는 0.903~0.935였다. 분석 코드와 난수 시드는 부록에 첨부한다.</p>
+</blockquote>
+</section>
+<section id="실습-패키지로-풀기" class="level2">
+<h2 class="anchored" data-anchor-id="실습-패키지로-풀기">실습: 패키지로 풀기</h2>
+<p>CI 환경에 brms가 없어 실행하지 않습니다(<code>eval: false</code>). brms는 Stan의 NUTS로 표집하고 집단 수준 효과를 비중심화로 씁니다. HMC도 모수화에 따라 효율이 달라지므로 같은 진단을 거칩니다.</p>
+<p>한 가지 주의할 점은, brms가 예측변수를 내부에서 중심화하므로 <code>class = Intercept</code> 사전은 disease 평균(0.5)에서의 절편에 걸린다는 것입니다. 우리 모형의 <span class="math inline">\(\beta_0\)</span>에 정확히 걸려면 식을 <code>y | trials(n) ~ 0 + Intercept + disease + (1 | patient)</code>로 쓰고 <code>prior(normal(-2, 1.5), class = b, coef = Intercept)</code>를 줍니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb31"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(brms)</span>
+<span id="cb31-2"><a href="#cb31-2" aria-hidden="true" tabindex="-1"></a>pri <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fu">prior</span>(<span class="fu">normal</span>(<span class="sc">-</span><span class="dv">2</span>, <span class="fl">1.5</span>), <span class="at">class =</span> Intercept), <span class="fu">prior</span>(<span class="fu">normal</span>(<span class="dv">0</span>, <span class="dv">1</span>), <span class="at">class =</span> b), <span class="fu">prior</span>(<span class="fu">normal</span>(<span class="dv">0</span>, <span class="dv">1</span>), <span class="at">class =</span> sd))  <span class="co"># sd는 반정규</span></span>
+<span id="cb31-3"><a href="#cb31-3" aria-hidden="true" tabindex="-1"></a>fit_prior <span class="ot">&lt;-</span> <span class="fu">brm</span>(y <span class="sc">|</span> <span class="fu">trials</span>(n) <span class="sc">~</span> disease <span class="sc">+</span> (<span class="dv">1</span> <span class="sc">|</span> patient), <span class="at">family =</span> <span class="fu">binomial</span>(), <span class="at">data =</span> dat,</span>
+<span id="cb31-4"><a href="#cb31-4" aria-hidden="true" tabindex="-1"></a>                 <span class="at">prior =</span> pri, <span class="at">sample_prior =</span> <span class="st">"only"</span>, <span class="at">chains =</span> <span class="dv">4</span>, <span class="at">seed =</span> <span class="dv">1</span>)   <span class="co"># 사전예측검사</span></span>
+<span id="cb31-5"><a href="#cb31-5" aria-hidden="true" tabindex="-1"></a><span class="fu">pp_check</span>(fit_prior)</span>
+<span id="cb31-6"><a href="#cb31-6" aria-hidden="true" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">brm</span>(y <span class="sc">|</span> <span class="fu">trials</span>(n) <span class="sc">~</span> disease <span class="sc">+</span> (<span class="dv">1</span> <span class="sc">|</span> patient), <span class="at">family =</span> <span class="fu">binomial</span>(), <span class="at">data =</span> dat, <span class="at">prior =</span> pri, <span class="at">chains =</span> <span class="dv">4</span>, <span class="at">seed =</span> <span class="dv">1</span>)</span>
+<span id="cb31-7"><a href="#cb31-7" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(fit)   <span class="co"># Rhat, Bulk_ESS, Tail_ESS. 발산 전이가 있으면 경고가 함께 나옴</span></span>
+<span id="cb31-8"><a href="#cb31-8" aria-hidden="true" tabindex="-1"></a><span class="fu">pp_check</span>(fit)  <span class="co"># 사후예측검사</span></span>
+<span id="cb31-9"><a href="#cb31-9" aria-hidden="true" tabindex="-1"></a><span class="fu">loo</span>(fit)       <span class="co"># 한 행 = 환자 한 명이라 LOO가 곧 환자 하나 빼기. 관측마다 u_i가 있어 Pareto k가 클 수 있음</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="연습문제" class="level2">
+<h2 class="anchored" data-anchor-id="연습문제">연습문제</h2>
+<section id="문제-1.-넓은-절편-사전의-사전예측" class="level3">
+<h3 class="anchored" data-anchor-id="문제-1.-넓은-절편-사전의-사전예측">문제 1. 넓은 절편 사전의 사전예측</h3>
+<p><span class="math inline">\(\beta_1\)</span>과 <span class="math inline">\(\tau\)</span>의 사전은 약정보 사전 그대로 두고 <span class="math inline">\(\beta_0\)</span>의 사전만 <span class="math inline">\(\mathcal{N}(0, 10^2)\)</span>로 되돌렸을 때, 사전예측 <span class="math inline">\(\theta\)</span>가 0.01 미만 또는 0.99 초과인 비율을 계산하십시오. <span class="math inline">\(\beta_0\)</span>만 있을 때의 이론값과 비교하십시오.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-6-contents" aria-controls="callout-6" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+풀이
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-6" class="callout-6-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="cell">
+<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">4</span>); th_ex1 <span class="ot">&lt;-</span> <span class="fu">prior_theta</span>(<span class="dv">0</span>, <span class="dv">10</span>, <span class="dv">1</span>, <span class="dv">1</span>)   <span class="co"># beta0 ~ N(0, 10^2), 나머지는 약정보 사전</span></span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">c</span>(<span class="at">below_0.01 =</span> <span class="fu">mean</span>(th_ex1 <span class="sc">&lt;</span> <span class="fl">0.01</span>), <span class="at">above_0.99 =</span> <span class="fu">mean</span>(th_ex1 <span class="sc">&gt;</span> <span class="fl">0.99</span>), <span class="at">extreme =</span> <span class="fu">ext</span>(th_ex1),</span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>        <span class="at">beta0_only =</span> <span class="dv">2</span> <span class="sc">*</span> <span class="fu">pnorm</span>(<span class="sc">-</span><span class="fu">qlogis</span>(<span class="fl">0.99</span>) <span class="sc">/</span> <span class="dv">10</span>), <span class="at">weak_prior =</span> <span class="fu">ext</span>(th_weak)), <span class="dv">3</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>below_0.01 above_0.99    extreme beta0_only weak_prior 
+     0.327      0.323      0.651      0.646      0.086 </code></pre>
+</div>
+</div>
+<p>절편 하나만 넓혀도 새 환자의 약 65%가 0 또는 1에 붙습니다. <span class="math inline">\(\beta_0\)</span>만 있을 때의 이론값은 <span class="math inline">\(\Pr(|\beta_0| &gt; \text{logit}(0.99)) = 2\Phi(-4.595/10)\)</span>이고, <span class="math inline">\(\beta_1\)</span>과 <span class="math inline">\(u_i\)</span>가 더해지면 로짓의 분산이 조금 커지지만 그 효과는 아주 작아서, 두 값의 차이는 대부분 몬테카를로 오차(약 0.003) 수준입니다. 약정보 사전의 8.6%와 비교하면, 사전예측을 망가뜨리는 데는 넓은 모수 하나면 충분합니다.</p>
+</div>
+</div>
+</div>
+</section>
+<section id="문제-2.-환자-수를-줄이면" class="level3">
+<h3 class="anchored" data-anchor-id="문제-2.-환자-수를-줄이면">문제 2. 환자 수를 줄이면</h3>
+<p>C1~C3, D1~D3의 3+3명만 남기고 계층 모형을 다시 적합해 <span class="math inline">\(\beta_1\)</span>의 95% 신용구간 폭과 <span class="math inline">\(\Pr(\beta_1 &gt; 0 \mid y)\)</span>가 어떻게 바뀌는지 보십시오. 같은 자료의 세포 단위 glm p-value도 확인하십시오.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-7-contents" aria-controls="callout-7" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+풀이
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-7" class="callout-7-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="cell">
+<div class="sourceCode cell-code" id="cb34"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a>sub <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">3</span>, <span class="dv">7</span><span class="sc">:</span><span class="dv">9</span>); <span class="fu">set.seed</span>(<span class="dv">7</span>)                     <span class="co"># C1~C3, D1~D3</span></span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a>inits_s <span class="ot">&lt;-</span> <span class="fu">lapply</span>(<span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>, <span class="cf">function</span>(j) <span class="fu">c</span>(start_b[j, ], <span class="fu">qlogis</span>(y[sub] <span class="sc">/</span> n_cell[sub]) <span class="sc">+</span> <span class="fu">rnorm</span>(<span class="dv">6</span>, <span class="dv">0</span>, <span class="fl">0.5</span>)))</span>
+<span id="cb34-3"><a href="#cb34-3" aria-hidden="true" tabindex="-1"></a>arr_s <span class="ot">&lt;-</span> <span class="fu">run_ccp</span>(inits_s, <span class="fu">c</span>(<span class="fl">0.5</span>, <span class="fl">0.6</span>, <span class="fl">0.6</span>, <span class="fu">rep</span>(<span class="fl">0.2</span>, <span class="dv">6</span>)), <span class="at">centered =</span> <span class="cn">TRUE</span>, y[sub], n_cell[sub], disease[sub])</span>
+<span id="cb34-4"><a href="#cb34-4" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">diag_tab</span>(arr_s), <span class="dv">3</span>); b1_s <span class="ot">&lt;-</span> <span class="fu">c</span>(arr_s[, <span class="dv">2</span>, ])   <span class="co"># 진단부터</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>         rhat      ess
+beta0   1.004  958.532
+beta1   1.003  810.218
+log_tau 1.001 1048.613</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb36"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a>width <span class="ot">&lt;-</span> <span class="cf">function</span>(v) <span class="fu">unname</span>(<span class="fu">diff</span>(<span class="fu">quantile</span>(v, <span class="fu">c</span>(<span class="fl">0.025</span>, <span class="fl">0.975</span>))))</span>
+<span id="cb36-2"><a href="#cb36-2" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">c</span>(<span class="at">width_6v6 =</span> <span class="fu">width</span>(b1_d), <span class="at">width_3v3 =</span> <span class="fu">width</span>(b1_s), <span class="at">ratio =</span> <span class="fu">width</span>(b1_s) <span class="sc">/</span> <span class="fu">width</span>(b1_d),</span>
+<span id="cb36-3"><a href="#cb36-3" aria-hidden="true" tabindex="-1"></a>        <span class="at">pr_6v6 =</span> <span class="fu">mean</span>(b1_d <span class="sc">&gt;</span> <span class="dv">0</span>), <span class="at">pr_3v3 =</span> <span class="fu">mean</span>(b1_s <span class="sc">&gt;</span> <span class="dv">0</span>)), <span class="dv">3</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>width_6v6 width_3v3     ratio    pr_6v6    pr_3v3 
+    1.192     1.654     1.388     0.925     0.707 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb38"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="fu">signif</span>(<span class="fu">summary</span>(<span class="fu">glm</span>(<span class="fu">cbind</span>(y, n <span class="sc">-</span> y) <span class="sc">~</span> disease, <span class="at">family =</span> binomial, <span class="at">data =</span> dat[sub, ]))<span class="sc">$</span>coefficients[<span class="dv">2</span>, ], <span class="dv">3</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  Estimate Std. Error    z value   Pr(&gt;|z|) 
+  3.81e-01   7.01e-02   5.43e+00   5.71e-08 </code></pre>
+</div>
+</div>
+<p>진단을 통과한 것을 확인한 뒤 보면 구간 폭이 약 1.4배로 넓어지고 <span class="math inline">\(\Pr(\beta_1 &gt; 0 \mid y)\)</span>는 0.925에서 0.707로 떨어집니다. 질환 효과의 표준오차는 대략 군당 환자 수의 제곱근에 반비례하므로 환자를 절반으로 줄이면 폭이 <span class="math inline">\(\sqrt{2} \approx 1.41\)</span>배쯤 됩니다. 세포 단위 glm은 여전히 p-value가 <span class="math inline">\(10^{-8}\)</span> 수준입니다. 환자마다 세포는 수백~수천 개씩 그대로 남아 있기 때문입니다. 설계 단계에서 늘려야 하는 것은 세포 수가 아니라 환자 수입니다.</p>
+</div>
+</div>
+</div>
+</section>
+<section id="문제-3.-자기-데이터용-체크리스트-쓰기" class="level3">
+<h3 class="anchored" data-anchor-id="문제-3.-자기-데이터용-체크리스트-쓰기">문제 3. 자기 데이터용 체크리스트 쓰기</h3>
+<p>자기 연구 데이터 하나를 골라 위 체크리스트 13개 항목에 한두 줄씩 답을 적으십시오. 특히 2번(반복 단위), 4번(사전예측), 8번(PPC 통계량)을 구체적으로 쓰십시오.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-8-contents" aria-controls="callout-8" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+풀이
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-8" class="callout-8-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p>예시 답안입니다. 노화 마우스 공간전사체에서 특정 세포유형이 차지하는 스팟 비율을 비교한다고 합시다(젊은 마우스 4마리, 늙은 마우스 4마리, 마우스당 절편 2~3장, 절편당 스팟 수천 개). <strong>2번</strong>: 반복 단위는 마우스 8마리입니다. 절편은 마우스 안에, 스팟은 절편 안에 중첩되므로 <span class="math inline">\(\text{logit}\,\theta_{ms} = \beta_0 + \beta_1 x_m + u_m + v_{ms}\)</span>처럼 마우스 효과 <span class="math inline">\(u_m\)</span>과 절편 효과 <span class="math inline">\(v_{ms}\)</span>를 모두 둡니다. 스팟을 독립으로 세면 이번 예제보다 심한 가성반복이 됩니다. <strong>4번</strong>: 새 마우스의 비율과 마우스 간·절편 간 변동이 예비 데이터나 문헌의 범위에 드는지 사전예측으로 봅니다. <strong>5번</strong>: 마우스가 8마리뿐이라 <span class="math inline">\(\tau_{\text{mouse}}\)</span>가 가짜 데이터에서 복원되는지, 사전에 얼마나 끌려가는지 먼저 확인합니다. <strong>8번</strong>: PPC 통계량으로 마우스 간 분산과 같은 마우스 안 절편 간 분산을 따로 씁니다. 한 층만 재현해서는 부족합니다. <strong>9번</strong>: <span class="math inline">\(\tau_{\text{mouse}}\)</span> 사전 척도를 바꿔 <span class="math inline">\(\Pr(\beta_1 &gt; 0 \mid y)\)</span>가 움직이는지 봅니다.</p>
+</div>
+</div>
+</div>
+</section>
+</section>
+<section id="정리" class="level2">
+<h2 class="anchored" data-anchor-id="정리">정리</h2>
+<ul>
+<li>베이지안 분석은 질문 → 생성 모형 → 사전예측검사 → 가짜 데이터 복원 → 적합 → 수렴 진단 → PPC → 민감도 → 모형 비교 → 보고로 이어지는 고리이며, 점검에서 실패하면 앞 단계로 돌아갑니다.</li>
+<li>가능도는 값의 범위, 반복 단위, 과산포로 고릅니다. 세포처럼 관측 단위가 반복 단위 안에 중첩되면 반복 단위의 효과를 모형에 넣어야 하고, 그러지 않으면 가성반복 때문에 효과가 없어도 대부분 유의하게 나옵니다.</li>
+<li>로짓 척도에서 넓은 사전은 무정보가 아니라 “거의 0 아니면 거의 1”이라는 주장입니다. 사전분포는 사전예측 데이터로 판단합니다.</li>
+<li>비중심화가 항상 나은 것은 아닙니다. 그룹별 자료가 많으면 중심화가 낫고, 그것을 알려 주는 것은 흩어진 초기값에서 돌린 여러 체인의 R-hat과 ESS입니다.</li>
+<li>결과는 사후 중앙값과 신용구간, 관심 가설의 사후확률, 민감도 표, 진단값과 함께 보고합니다(Kruschke 2021).</li>
+</ul>
+</section>
+<section id="다음-시간" class="level2">
+<h2 class="anchored" data-anchor-id="다음-시간">다음 시간</h2>
+<p>이번 주로 강의를 마칩니다. 다음 공부로는 워크플로우 전체를 다룬 Gelman et al.&nbsp;(2020)을 끝까지 읽고, 모형 점검과 계층 모형을 더 깊게 보려면 BDA3(Gelman et al.&nbsp;2013), 직관과 코드로 다시 쌓으려면 Statistical Rethinking 2판(McElreath 2020), Stan으로 옮기려면 Stan 사용자 가이드를 권합니다. Part 2의 fine-mapping, colocalization, HMM, CNV calling은 각 방법의 원 논문을 이 체크리스트를 옆에 두고 다시 읽어 보십시오.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<!-- AI Chat Widget 초기화 -->
+
+<!-- _quarto.yml의 include-after-body에 등록되어 모든 페이지에 자동 삽입됩니다 -->
+
+<script>
+
+  // ★ Cloudflare Worker 배포 후 URL로 교체하세요
+
+  const WORKER_URL = "https://falling-wave-447f.eh0129s.workers.dev/";
+
+
+
+  // 각 .qmd 파일의 YAML에서 ai-context를 읽어옵니다
+
+  // (없으면 빈 문자열 → 기본 안내 메시지)
+
+  const metaContext = document.querySelector('meta[name="ai-context"]');
+
+  const metaTitle   = document.querySelector('meta[name="ai-title"]') || { content: document.title };
+
+
+
+  window.AI_CHAT_CONFIG = {
+
+    workerUrl:      WORKER_URL,
+
+    chapterContext: metaContext ? metaContext.content : "",
+
+    chapterTitle:   metaTitle  ? metaTitle.content   : document.title,
+
+  };
+
+</script>
+
+<script src="../_extensions/ai-chat/ai-chat.js" defer=""></script>
+
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+<p>Copyright 2026, Eunji</p>
+</div>   
+    <div class="nav-footer-center">
+      &nbsp;
+    </div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+<script src="../site_libs/quarto-html/zenscroll-min.js"></script>
+</body></html>

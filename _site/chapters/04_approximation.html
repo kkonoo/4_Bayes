@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.32">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Eunji Ha">
+<meta name="dcterms.date" content="2026-09-21">
+<meta name="description" content="켤레가 아닌 사후분포를 격자·라플라스·기각표집·중요도표집으로 근사하고, 각 방법이 언제 무너지는지 확인합니다.">
+
+<title>W4. 사후분포의 수치적 근사 – 베이지안 통계</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<link href="../images/logo.ico" rel="icon">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-234273d1456647dabc34a594ac50e507.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-b7acaf8b0572301ab572ffd94e5b5c34.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<style>html{ scroll-behavior: smooth; }</style>
+<meta name="ai-title" content="W4. 사후분포의 수치적 근사">
+<meta name="ai-context" content="
+이 챕터는 켤레(conjugate) 관계가 없어 정규화상수 m(y) = INT p(y|theta) p(theta) dtheta 를 해석적으로 풀 수 없을 때
+쓰는 네 가지 수치적 근사법을 다룹니다. 공통 예제는 비켤레 모형으로, 대립유전자 read 수 y ~ Binomial(n, theta) 에
+로짓(logit) 스케일 모수 beta = log(theta/(1-theta)) 를 두고 beta ~ Normal(0, 1.5^2) 사전을 줍니다. 비정규화 로그사후는
+log q(beta) = y*beta - n*log(1+exp(beta)) + dnorm(beta, 0, 1.5, log=TRUE) 이고, 오버플로를 막으려고
+log1pexp(x) = x (x가 클 때) 또는 log1p(exp(x)) 를 씁니다.
+
+격자 근사(grid approximation)는 모수 공간을 균등 격자로 쪼개 각 점에서 비정규화 사후를 계산하고 합으로 나눠
+정규화합니다. 1~2차원에서는 사실상 정답이지만 격자점 수가 G^d 로 늘어나는 차원의 저주(curse of dimensionality)를
+겪습니다. 라플라스 근사(Laplace approximation)는 로그사후를 최빈값(MAP) 주변에서 2차 테일러 전개해
+Normal(beta_map, H^-1) 로 근사하며 optim(..., hessian=TRUE) 로 헤시안 H를 얻습니다. 기각표집(rejection sampling)은
+제안분포 g와 상수 M에 대해 q <= M g 를 만족시키고 수용확률 q/(M g) 로 채택하며, 전체 수용률은 m(y)/M 이고 차원이
+오르면 급락합니다. 중요도표집(importance sampling)은 가중치 w = q/g 로 자기정규화(self-normalized) 추정량을 만들고
+유효표본수 ESS = (sum w)^2 / sum(w^2) 로 품질을 잽니다. 제안분포 꼬리가 사후보다 얇으면 가중치가 발산합니다.
+
+실습 함수는 optim, dnorm, dt, rnorm, rt, rbinom, runif, plogis, qlogis, cumsum 이고 base R만 씁니다. set.seed(42)로
+시드를 고정하며, 네 방법이 모두 고차원에서 한계를 보이므로 W5의 MCMC로 넘어간다는 흐름으로 마무리합니다.
+">
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN") {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../assets/html.css">
+</head>
+
+<body class="nav-sidebar floating nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../index.html">
+    <span class="navbar-title">베이지안 통계</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link active" href="../index.html" aria-current="page"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+</ul>
+            <ul class="navbar-nav navbar-nav-scroll ms-auto">
+  <li class="nav-item compact">
+    <a class="nav-link" href="https://github.com/kkonoo/4_Bayes"> <i class="bi bi-github" role="img">
+</i> 
+<span class="menu-text"></span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../chapters/01_probability_bayes.html">Part 1. 베이지안 통계의 기초</a></li><li class="breadcrumb-item"><a href="../chapters/04_approximation.html">W4. 사후분포의 수치적 근사</a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-full page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Home</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 1. 베이지안 통계의 기초</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/01_probability_bayes.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W1. 확률과 베이즈 정리</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/02_conjugate.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W2. 켤레사전분포 (Conjugate Priors)</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/03_prior_posterior.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W3. 사전분포의 선택과 사후 요약</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/04_approximation.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text">W4. 사후분포의 수치적 근사</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/05_mcmc_basics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W5. MCMC 기초 — Metropolis–Hastings와 Gibbs</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/06_hmc_diagnostics.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W6. HMC와 수렴 진단</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/07_hierarchical_modelcomp.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W7. 계층 모형과 모델 비교</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+ <span class="menu-text">Part 2. 생명정보학 응용</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/08_bayesian_regression.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W8. 베이지안 회귀와 축소사전분포</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/09_finemapping.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W9. GWAS fine-mapping</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/10_colocalization.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W10. Colocalization</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/11_hmm_chromatin.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W11. HMM 기반 chromatin state</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/12_cnv_calling.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W12. CNV calling</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../chapters/13_capstone.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">W13. 캡스톤: 자기 데이터에 베이지안 모형 적용하기</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Contents</h2>
+   
+  <ul>
+  <li><a href="#학습-목표" id="toc-학습-목표" class="nav-link active" data-scroll-target="#학습-목표">학습 목표</a></li>
+  <li><a href="#문제-정규화상수를-못-푼다" id="toc-문제-정규화상수를-못-푼다" class="nav-link" data-scroll-target="#문제-정규화상수를-못-푼다">문제: 정규화상수를 못 푼다</a></li>
+  <li><a href="#격자-근사" id="toc-격자-근사" class="nav-link" data-scroll-target="#격자-근사">격자 근사</a>
+  <ul>
+  <li><a href="#차원의-저주" id="toc-차원의-저주" class="nav-link" data-scroll-target="#차원의-저주">차원의 저주</a></li>
+  </ul></li>
+  <li><a href="#라플라스-근사" id="toc-라플라스-근사" class="nav-link" data-scroll-target="#라플라스-근사">라플라스 근사</a></li>
+  <li><a href="#기각표집" id="toc-기각표집" class="nav-link" data-scroll-target="#기각표집">기각표집</a></li>
+  <li><a href="#중요도표집" id="toc-중요도표집" class="nav-link" data-scroll-target="#중요도표집">중요도표집</a></li>
+  <li><a href="#네-방법-비교-그리고-왜-mcmc인가" id="toc-네-방법-비교-그리고-왜-mcmc인가" class="nav-link" data-scroll-target="#네-방법-비교-그리고-왜-mcmc인가">네 방법 비교, 그리고 왜 MCMC인가</a></li>
+  <li><a href="#실습-base-r로-직접-구현" id="toc-실습-base-r로-직접-구현" class="nav-link" data-scroll-target="#실습-base-r로-직접-구현">실습: base R로 직접 구현</a>
+  <ul>
+  <li><a href="#단계.-공통-예제-만들기" id="toc-단계.-공통-예제-만들기" class="nav-link" data-scroll-target="#단계.-공통-예제-만들기">0단계. 공통 예제 만들기</a></li>
+  <li><a href="#단계.-격자-근사로-기준선-만들기" id="toc-단계.-격자-근사로-기준선-만들기" class="nav-link" data-scroll-target="#단계.-격자-근사로-기준선-만들기">1단계. 격자 근사로 기준선 만들기</a></li>
+  <li><a href="#단계.-optim으로-map와-헤시안" id="toc-단계.-optim으로-map와-헤시안" class="nav-link" data-scroll-target="#단계.-optim으로-map와-헤시안">2단계. <code>optim</code>으로 MAP와 헤시안</a></li>
+  <li><a href="#단계.-기각표집" id="toc-단계.-기각표집" class="nav-link" data-scroll-target="#단계.-기각표집">3단계. 기각표집</a></li>
+  <li><a href="#단계.-중요도표집과-ess" id="toc-단계.-중요도표집과-ess" class="nav-link" data-scroll-target="#단계.-중요도표집과-ess">4단계. 중요도표집과 ESS</a></li>
+  <li><a href="#단계.-네-방법-결과-비교" id="toc-단계.-네-방법-결과-비교" class="nav-link" data-scroll-target="#단계.-네-방법-결과-비교">5단계. 네 방법 결과 비교</a></li>
+  </ul></li>
+  <li><a href="#연습문제" id="toc-연습문제" class="nav-link" data-scroll-target="#연습문제">연습문제</a></li>
+  <li><a href="#정리" id="toc-정리" class="nav-link" data-scroll-target="#정리">정리</a></li>
+  <li><a href="#다음-시간" id="toc-다음-시간" class="nav-link" data-scroll-target="#다음-시간">다음 시간</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content column-body" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../chapters/01_probability_bayes.html">Part 1. 베이지안 통계의 기초</a></li><li class="breadcrumb-item"><a href="../chapters/04_approximation.html">W4. 사후분포의 수치적 근사</a></li></ol></nav>
+<div class="quarto-title">
+<h1 class="title">W4. 사후분포의 수치적 근사</h1>
+</div>
+
+<div>
+  <div class="description">
+    켤레가 아닌 사후분포를 격자·라플라스·기각표집·중요도표집으로 근사하고, 각 방법이 언제 무너지는지 확인합니다.
+  </div>
+</div>
+
+
+<div class="quarto-title-meta column-body">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Eunji Ha </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">September 21, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="학습-목표" class="level2">
+<h2 class="anchored" data-anchor-id="학습-목표">학습 목표</h2>
+<ul>
+<li>켤레가 아닌 모형에서 정규화상수를 왜 해석적으로 구할 수 없는지 설명할 수 있다.</li>
+<li>격자 근사를 구현하고, 차원의 저주가 왜 치명적인지 구체적 수치로 설명할 수 있다.</li>
+<li><code>optim(..., hessian = TRUE)</code>으로 라플라스 근사를 구현하고 그 가정이 깨지는 상황을 진단할 수 있다.</li>
+<li>기각표집과 중요도표집을 구현하고 수용률·유효표본수(ESS)로 품질을 평가할 수 있다.</li>
+<li>네 방법의 한계를 비교해 MCMC가 필요한 이유를 설명할 수 있다.</li>
+</ul>
+<p>RNA-seq 정렬 결과에서 어떤 이형접합 부위의 read를 세어 보니 40개 중 일부가 대립유전자(alternative allele)를 담고 있었습니다. 대립유전자 특이적 발현(allele-specific expression)이 있는지 보려면 대립유전자 비율 <span class="math inline">\(\theta\)</span>의 사후분포가 필요합니다. <a href="../chapters/02_conjugate.html">W2</a>처럼 베타 사전을 쓰면 답이 닫힌 형태로 나옵니다. 그런데 이 랩에서는 여러 부위를 하나의 회귀로 묶을 계획이라, 처음부터 로짓(logit) 스케일 모수 <span class="math inline">\(\beta = \log\{\theta/(1-\theta)\}\)</span>에 정규 사전을 주기로 했습니다. 로지스틱 회귀 계수와 같은 스케일이라 나중에 공변량을 붙이기 쉽기 때문입니다. 이 순간 켤레성이 사라집니다. 이항 가능도와 로짓 스케일 정규 사전의 곱은 우리가 이름을 아는 어떤 분포도 아닙니다. 사후분포의 모양은 계산할 수 있지만, 그것을 확률분포로 만들어 주는 상수를 손으로 구할 수 없습니다. 이번 주는 그 상수를 우회하는 네 가지 방법을 배웁니다.</p>
+</section>
+<section id="문제-정규화상수를-못-푼다" class="level2">
+<h2 class="anchored" data-anchor-id="문제-정규화상수를-못-푼다">문제: 정규화상수를 못 푼다</h2>
+<p>베이즈 정리는 사후가 가능도와 사전의 곱에 비례한다고 말합니다. 비례상수는 그 곱을 모수 공간 전체에서 적분한 값입니다. 켤레 모형에서는 이 적분이 이미 알려진 분포의 정규화상수와 같아 공짜로 얻어지지만, 켤레가 아니면 그렇지 않습니다. 다만 <strong>비정규화 사후(unnormalized posterior)는 언제나 계산할 수 있습니다.</strong> 가능도와 사전을 곱하면 되니까요. 못 하는 것은 그 값을 전체 적분값으로 나누는 일뿐이고, 이번 주의 네 방법은 모두 “비정규화 값만 쓰고 적분은 피한다”는 같은 전략에서 출발합니다.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-1-contents" aria-controls="callout-1" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+수식으로 보기
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-1" class="callout-1-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p><span class="math display">\[p(\theta \mid y) = \frac{p(y \mid \theta)\,p(\theta)}{m(y)}, \qquad m(y) = \int p(y \mid \theta)\,p(\theta)\,d\theta\]</span></p>
+<p><span class="math inline">\(m(y)\)</span>는 주변가능도(marginal likelihood)입니다. 앞으로 <span class="math inline">\(q(\theta) = p(y\mid\theta)p(\theta)\)</span>를 비정규화 사후라 부르고 <span class="math inline">\(p(\theta\mid y) = q(\theta)/m(y)\)</span>로 씁니다. 이 챕터의 공통 모형은 <span class="math inline">\(y \sim \text{Binomial}(n,\theta)\)</span>, <span class="math inline">\(\theta = (1+e^{-\beta})^{-1}\)</span>, <span class="math inline">\(\beta \sim N(0,\,1.5^2)\)</span> 이므로 <span class="math inline">\(\log q(\beta) = y\beta - n\log(1+e^{\beta}) - \beta^2/(2\cdot 1.5^2) + \text{const}\)</span> 입니다. <span class="math inline">\(\beta\)</span>에 대해 지수족 형태로 정리되지 않아 <span class="math inline">\(\int q(\beta)d\beta\)</span>의 닫힌 형태가 없습니다.</p>
+</div>
+</div>
+</div>
+</section>
+<section id="격자-근사" class="level2">
+<h2 class="anchored" data-anchor-id="격자-근사">격자 근사</h2>
+<p>적분을 못 하겠으면 잘게 쪼개서 더하면 됩니다. 모수 공간을 촘촘한 격자로 덮고 각 격자점에서 <span class="math inline">\(q\)</span>를 계산한 뒤 전체 합으로 나눠 확률처럼 만듭니다. 거친 격자 다섯 개로 시작해 보겠습니다(가상의 데이터, <span class="math inline">\(y=7\)</span>, <span class="math inline">\(n=20\)</span>).</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>beta_5 <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="sc">-</span><span class="dv">3</span>, <span class="dv">1</span>, <span class="at">by =</span> <span class="dv">1</span>)                  <span class="co"># 로짓 스케일의 아주 거친 격자</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co"># 로그 비정규화 사후 = 이항 가능도(로짓 스케일) + 정규 사전</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>lp_5 <span class="ot">&lt;-</span> <span class="dv">7</span> <span class="sc">*</span> beta_5 <span class="sc">-</span> <span class="dv">20</span> <span class="sc">*</span> <span class="fu">log1p</span>(<span class="fu">exp</span>(beta_5)) <span class="sc">+</span> <span class="fu">dnorm</span>(beta_5, <span class="dv">0</span>, <span class="fl">1.5</span>, <span class="at">log =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>un_5 <span class="ot">&lt;-</span> <span class="fu">exp</span>(lp_5 <span class="sc">-</span> <span class="fu">max</span>(lp_5))                 <span class="co"># 최댓값을 빼고 지수화 (수치 안정성)</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">rbind</span>(<span class="at">beta =</span> beta_5, <span class="at">unnorm =</span> un_5, <span class="at">post =</span> un_5 <span class="sc">/</span> <span class="fu">sum</span>(un_5)), <span class="dv">4</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>       [,1]    [,2]    [,3]  [,4]   [,5]
+beta     -3 -2.0000 -1.0000 0.000 1.0000
+unnorm    0  0.0194  1.0000 0.687 0.0025
+post      0  0.0114  0.5852 0.402 0.0015</code></pre>
+</div>
+</div>
+<p>다섯 점만으로도 <span class="math inline">\(\beta\)</span>가 <span class="math inline">\(-1\)</span>과 <span class="math inline">\(0\)</span> 사이, 대략 <span class="math inline">\(-0.6\)</span> 근처에 몰려 있다는 것이 보입니다. 질량의 거의 전부가 <span class="math inline">\(\beta=-1\)</span>(0.585)과 <span class="math inline">\(\beta=0\)</span>(0.402) 두 점에 실려 있고, 이 다섯 점으로 계산한 사후평균은 <span class="math inline">\(-0.61\)</span>입니다. 점을 수백 개로 늘리면 사실상 정확한 답이 됩니다.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-2-contents" aria-controls="callout-2" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+수식으로 보기
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-2" class="callout-2-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p><span class="math display">\[\hat{p}(\theta_g \mid y) = \frac{q(\theta_g)}{\sum_{j} q(\theta_j)}, \qquad \mathbb{E}[h(\theta)\mid y] \approx \sum_{g} h(\theta_g)\,\hat{p}(\theta_g \mid y).\]</span></p>
+<p>격자 <span class="math inline">\(\theta_1,\dots,\theta_G\)</span>와 간격 <span class="math inline">\(\Delta\)</span>에 대한 식입니다. <span class="math inline">\(\Delta\)</span>는 분자와 분모에서 상쇄되므로 기댓값에는 나타나지 않습니다. 이 챕터에서 <span class="math inline">\(\hat{p}(\theta_g\mid y)\)</span>는 격자점의 <strong>확률질량</strong>이고(합이 1), 밀도 곡선을 그릴 때만 <span class="math inline">\(\hat{p}/\Delta\)</span>로 나눕니다. <a href="../chapters/01_probability_bayes.html">W1</a>에서는 같은 자리를 처음부터 <span class="math inline">\(\Delta\)</span>로 나눈 <strong>밀도</strong>로 정의했으니 두 주차의 식을 비교할 때 주의하십시오. 오차는 격자 간격에 대해 <span class="math inline">\(O(\Delta^2)\)</span> 수준입니다.</p>
+</div>
+</div>
+</div>
+<section id="차원의-저주" class="level3">
+<h3 class="anchored" data-anchor-id="차원의-저주">차원의 저주</h3>
+<p>각 축을 100등분하면 격자점 수는 <span class="math inline">\(100^d\)</span>입니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>n_dim <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>, <span class="dv">5</span>, <span class="dv">10</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>n_points <span class="ot">&lt;-</span> <span class="dv">100</span><span class="sc">^</span>n_dim                          <span class="co"># 축당 100등분</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>est_sec <span class="ot">&lt;-</span> n_points <span class="sc">*</span> <span class="fl">1e-6</span>                     <span class="co"># 평가 1회당 1마이크로초 가정</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="fu">data.frame</span>(<span class="at">d =</span> n_dim, <span class="at">grid_points =</span> <span class="fu">signif</span>(n_points, <span class="dv">3</span>),</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>           <span class="at">seconds =</span> <span class="fu">signif</span>(est_sec, <span class="dv">3</span>), <span class="at">years =</span> <span class="fu">signif</span>(est_sec <span class="sc">/</span> <span class="fl">3.156e7</span>, <span class="dv">3</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>   d grid_points seconds    years
+1  1       1e+02   1e-04 3.17e-12
+2  2       1e+04   1e-02 3.17e-10
+3  3       1e+06   1e+00 3.17e-08
+4  5       1e+10   1e+04 3.17e-04
+5 10       1e+20   1e+14 3.17e+06</code></pre>
+</div>
+</div>
+<p>모수 3개면 백만 점, 1초입니다. 5개면 100억 점, 약 3시간입니다. 10개면 300만 년이 걸립니다. 계층모형이나 로지스틱 회귀에서 모수 10개는 전혀 큰 모형이 아닙니다.</p>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Warning
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>격자 근사는 “격자 범위 밖의 확률은 0”이라고 가정합니다. 범위를 좁게 잡으면 꼬리가 잘려 사후 표준편차가 과소추정되므로, 항상 격자 양 끝의 비정규화 사후값이 최댓값 대비 충분히 작은지 확인해야 합니다.</p>
+</div>
+</div>
+</section>
+</section>
+<section id="라플라스-근사" class="level2">
+<h2 class="anchored" data-anchor-id="라플라스-근사">라플라스 근사</h2>
+<p>표본이 많아지면 사후는 종 모양에 가까워집니다. 그렇다면 전체를 다 계산할 것 없이 봉우리의 위치와 그 주변이 휘어진 정도만 알면 됩니다. 로그사후는 봉우리 근처에서 아래로 볼록한 포물선처럼 보이는데, 로그가 정확히 포물선이면 원래 함수는 정확히 정규분포입니다. 그래서 두 가지만 구하면 됩니다. 로그사후를 최대로 만드는 점(최빈값, MAP)과 그 점에서의 2계 도함수입니다. 2계 도함수의 절댓값이 크면 봉우리가 뾰족하다는 뜻이고 그만큼 분산이 작습니다. 다차원이면 헤시안(Hessian) 행렬의 역행렬이 곧 공분산행렬입니다.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-4-contents" aria-controls="callout-4" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+수식으로 보기
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-4" class="callout-4-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p><span class="math display">\[\log q(\theta) \approx \log q(\hat\theta) - \tfrac{1}{2}(\theta-\hat\theta)^\top H (\theta-\hat\theta), \qquad H = -\left.\frac{\partial^2 \log q}{\partial\theta\,\partial\theta^\top}\right|_{\hat\theta}\]</span></p>
+<p><span class="math inline">\(\hat\theta = \arg\max_\theta \log q(\theta)\)</span>에서 2차까지 전개하면 1차항이 0이라 위 식이 되고, 지수를 취하면 정규분포의 커널이므로 <span class="math inline">\(p(\theta\mid y) \approx N(\hat\theta,\,H^{-1})\)</span>입니다. <span class="math inline">\(H\)</span>는 음의 로그사후의 헤시안이므로, 목적함수를 음의 로그사후로 두면 <code>optim(..., hessian = TRUE)</code>이 바로 <span class="math inline">\(H\)</span>를 돌려줍니다. 덤으로 <span class="math inline">\(m(y) \approx q(\hat\theta)(2\pi)^{d/2}|H|^{-1/2}\)</span>라는 정규화상수 근사도 얻는데, 이 식이 BIC의 출발점입니다.</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-tip callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Tip
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>라플라스 근사의 비용은 최적화 한 번입니다. 격자처럼 <span class="math inline">\(G^d\)</span>로 늘어나지 않고 모수 개수에 대해 다항식 수준으로만 늘어나므로 수십 차원에서도 즉시 계산됩니다.</p>
+</div>
+</div>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Warning
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>라플라스 근사는 사후가 하나의 봉우리를 갖고 대략 대칭일 때만 믿을 수 있습니다. 표본이 작거나, 모수가 경계 근처(<span class="math inline">\(\theta\)</span>가 0이나 1에 붙은 경우)이거나, 사후가 다봉(multimodal)이면 크게 빗나갑니다. 다봉일 때는 봉우리 하나만 잡고 나머지를 완전히 무시합니다.</p>
+</div>
+</div>
+</section>
+<section id="기각표집" class="level2">
+<h2 class="anchored" data-anchor-id="기각표집">기각표집</h2>
+<p>앞의 두 방법은 밀도를 근사했습니다. 이제부터는 사후에서 <strong>표본을 뽑는</strong> 방법입니다. 표본만 있으면 평균이든 구간이든 전부 표본통계량으로 계산할 수 있습니다. 직관은 다트 던지기입니다. 비정규화 사후 <span class="math inline">\(q\)</span>를 완전히 덮는 지붕 <span class="math inline">\(Mg\)</span>를 씌웁니다. <span class="math inline">\(g\)</span>는 쉽게 뽑을 수 있는 제안분포(proposal distribution), <span class="math inline">\(M\)</span>은 덮개를 만드는 상수입니다. <span class="math inline">\(g\)</span>에서 후보를 뽑고 0과 <span class="math inline">\(Mg\)</span> 사이에서 높이를 균등하게 뽑아, 그 높이가 <span class="math inline">\(q\)</span> 아래면 채택합니다. 채택된 점들은 근사가 아니라 <strong>정확히</strong> 사후분포를 따릅니다. 문제는 효율입니다. 지붕과 실제 함수 사이의 빈 공간이 넓을수록 버려지는 후보가 많아집니다.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-7-contents" aria-controls="callout-7" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+수식으로 보기
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-7" class="callout-7-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p><span class="math display">\[P(\text{accept}) = \frac{\int q(\theta)\,d\theta}{M} = \frac{m(y)}{M}\]</span></p>
+<p>모든 <span class="math inline">\(\theta\)</span>에서 <span class="math inline">\(q(\theta)\le Mg(\theta)\)</span>가 되도록 <span class="math inline">\(M \ge \sup_\theta q(\theta)/g(\theta)\)</span>를 잡고, <span class="math inline">\(\theta^*\sim g\)</span>와 <span class="math inline">\(u\sim\text{Uniform}(0,1)\)</span>을 뽑아 <span class="math inline">\(u \le q(\theta^*)/\{Mg(\theta^*)\}\)</span>이면 채택합니다. 채택된 표본의 분포는 정확히 <span class="math inline">\(p(\theta\mid y)\)</span>이고 전체 수용률(acceptance rate)은 위와 같습니다. <span class="math inline">\(d\)</span>차원에서 <span class="math inline">\(g\)</span>가 축마다 조금씩 어긋나면 그 불일치가 곱으로 누적되어 <span class="math inline">\(M\)</span>이 지수적으로 커집니다. 주어진 데이터에서 <span class="math inline">\(m(y)\)</span>는 상수이므로 수용률 <span class="math inline">\(m(y)/M\)</span>은 <span class="math inline">\(M\)</span>에 반비례하고, 따라서 지수적으로 떨어집니다. 실무에서 기각표집은 대체로 1~3차원용입니다.</p>
+</div>
+</div>
+</div>
+</section>
+<section id="중요도표집" class="level2">
+<h2 class="anchored" data-anchor-id="중요도표집">중요도표집</h2>
+<p>버리는 게 아까우니 전부 쓰되 가중치를 주자는 발상입니다. <span class="math inline">\(g\)</span>에서 뽑은 점들은 어떤 영역은 과대표집, 어떤 영역은 과소표집되어 있으므로, 각 점에 <span class="math inline">\(w = q/g\)</span>라는 보정 가중치를 붙이면 가중평균이 사후 기댓값의 일치추정량이 됩니다. <span class="math inline">\(q\)</span>가 비정규화 상태여도 괜찮습니다. 가중치 합이 1이 되도록 나누면(자기정규화, self-normalized) 모르는 상수가 분자·분모에서 상쇄되기 때문입니다. 품질은 가중치가 얼마나 고르게 퍼져 있는지로 잽니다. 소수의 점이 가중치를 독식하면 표본 수는 많아도 실질적으로는 몇 개짜리 표본이고, 이를 수치화한 것이 유효표본수(effective sample size, ESS)입니다.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-8-contents" aria-controls="callout-8" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+수식으로 보기
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-8" class="callout-8-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<p><span class="math display">\[\text{ESS} = \frac{\left(\sum_s w_s\right)^2}{\sum_s w_s^2} = \frac{1}{\sum_s \tilde w_s^2}\]</span></p>
+<p><span class="math inline">\(\theta_1,\dots,\theta_S \sim g\)</span>에 대해 <span class="math inline">\(w_s = q(\theta_s)/g(\theta_s)\)</span>, <span class="math inline">\(\tilde w_s = w_s/\sum_j w_j\)</span>라 두면 <span class="math inline">\(\mathbb{E}[h(\theta)\mid y] \approx \sum_s \tilde w_s h(\theta_s)\)</span>이고 ESS는 위와 같이 정의됩니다. 가중치가 모두 같으면 <span class="math inline">\(\text{ESS}=S\)</span>, 한 점이 전부 차지하면 <span class="math inline">\(\text{ESS}=1\)</span>입니다. 추정량의 분산은 <span class="math inline">\(\text{Var}[q(\theta)/g(\theta)] &lt; \infty\)</span>일 때만 유한한데, 이는 <span class="math inline">\(g\)</span>의 꼬리가 <span class="math inline">\(q\)</span>의 꼬리보다 두꺼울 것을 요구합니다.</p>
+</div>
+</div>
+</div>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Warning
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>제안분포의 꼬리가 사후보다 얇으면 <span class="math inline">\(w=q/g\)</span>가 꼬리에서 발산합니다. 아주 드물게 뽑히는 한 점이 엄청난 가중치를 받아 추정값이 그 점 하나에 좌우되고, 표본 수를 늘려도 수렴하지 않습니다. 정규 제안분포 대신 자유도가 낮은 <span class="math inline">\(t\)</span> 분포를 쓰는 이유가 이것입니다.</p>
+</div>
+</div>
+</section>
+<section id="네-방법-비교-그리고-왜-mcmc인가" class="level2">
+<h2 class="anchored" data-anchor-id="네-방법-비교-그리고-왜-mcmc인가">네 방법 비교, 그리고 왜 MCMC인가</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>방법</th>
+<th>출력</th>
+<th>정확도</th>
+<th>차원 확장성</th>
+<th>주요 실패 모드</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>격자 근사</td>
+<td>격자 위 밀도</td>
+<td>촘촘하면 사실상 정답</td>
+<td><span class="math inline">\(G^d\)</span>, 3차원 이상 불가</td>
+<td>범위를 좁게 잡아 꼬리 절단</td>
+</tr>
+<tr class="even">
+<td>라플라스 근사</td>
+<td>정규분포 모수</td>
+<td>대표본에서만 양호</td>
+<td>매우 좋음(최적화 1회)</td>
+<td>비대칭·다봉·소표본</td>
+</tr>
+<tr class="odd">
+<td>기각표집</td>
+<td>정확한 독립표본</td>
+<td>근사 오차 없음</td>
+<td>나쁨(수용률 지수적 감소)</td>
+<td><span class="math inline">\(M\)</span>을 못 찾음, 수용률 0에 근접</td>
+</tr>
+<tr class="even">
+<td>중요도표집</td>
+<td>가중표본</td>
+<td>가중치가 고르면 양호</td>
+<td>보통(ESS 급락)</td>
+<td>제안분포 꼬리가 얇을 때 발산</td>
+</tr>
+</tbody>
+</table>
+<p>격자·기각·중요도는 모두 <strong>모수 공간 전체를 미리 덮으려</strong> 합니다. 차원이 오르면 사후가 실제로 차지하는 부피는 전체의 극히 일부가 되므로 이 전략은 반드시 무너집니다. 라플라스만 국소적이지만 대신 모양을 정규분포로 고정해 버립니다. MCMC는 공간을 덮는 대신 현재 위치에서 다음 위치로 <strong>걸어 다니면서</strong> 확률이 높은 곳에 오래 머무는 마르코프 연쇄를 만듭니다. 전역 제안분포가 필요 없고 비정규화 사후의 비(ratio)만 계산하면 되며, 대가는 표본이 서로 독립이 아니라는 점입니다.</p>
+</section>
+<section id="실습-base-r로-직접-구현" class="level2">
+<h2 class="anchored" data-anchor-id="실습-base-r로-직접-구현">실습: base R로 직접 구현</h2>
+<section id="단계.-공통-예제-만들기" class="level3">
+<h3 class="anchored" data-anchor-id="단계.-공통-예제-만들기">0단계. 공통 예제 만들기</h3>
+<p>가상의 데이터입니다. 이형접합 부위 하나에서 read 40개를 관측했고 참 대립유전자 비율은 0.25로 두었습니다. 표본 변동 때문에 관측 비율은 참값과 다소 다르게 나옵니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>); n_reads <span class="ot">&lt;-</span> <span class="dv">40</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>y_alt <span class="ot">&lt;-</span> <span class="fu">rbinom</span>(<span class="dv">1</span>, <span class="at">size =</span> n_reads, <span class="at">prob =</span> <span class="fl">0.25</span>)          <span class="co"># 참 비율 0.25에서 생성</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"관측된 대립유전자 read 수:"</span>, y_alt, <span class="st">"/"</span>, n_reads, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>관측된 대립유전자 read 수: 14 / 40 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>log1pexp <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="fu">ifelse</span>(x <span class="sc">&gt;</span> <span class="dv">30</span>, x, <span class="fu">log1p</span>(<span class="fu">exp</span>(x))) <span class="co"># 오버플로 방지 도우미</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="co"># 로그 비정규화 사후: 로짓 스케일 모수 beta, 사전 N(0, 1.5^2)</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>log_post <span class="ot">&lt;-</span> <span class="cf">function</span>(beta, <span class="at">y =</span> y_alt, <span class="at">n =</span> n_reads, <span class="at">s =</span> <span class="fl">1.5</span>) {</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  y <span class="sc">*</span> beta <span class="sc">-</span> n <span class="sc">*</span> <span class="fu">log1pexp</span>(beta) <span class="sc">+</span> <span class="fu">dnorm</span>(beta, <span class="dv">0</span>, s, <span class="at">log =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="단계.-격자-근사로-기준선-만들기" class="level3">
+<h3 class="anchored" data-anchor-id="단계.-격자-근사로-기준선-만들기">1단계. 격자 근사로 기준선 만들기</h3>
+<p>1차원이므로 촘촘한 격자는 사실상 정답입니다. 이후 세 방법을 이 기준선과 비교합니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>beta_grid <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="sc">-</span><span class="dv">6</span>, <span class="dv">2</span>, <span class="at">length.out =</span> <span class="dv">2000</span>)               <span class="co"># 충분히 넓은 범위</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>lp_grid <span class="ot">&lt;-</span> <span class="fu">log_post</span>(beta_grid); w_grid <span class="ot">&lt;-</span> <span class="fu">exp</span>(lp_grid <span class="sc">-</span> <span class="fu">max</span>(lp_grid))</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>p_grid <span class="ot">&lt;-</span> w_grid <span class="sc">/</span> <span class="fu">sum</span>(w_grid)                           <span class="co"># 격자 위 확률질량</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>dens_grid <span class="ot">&lt;-</span> p_grid <span class="sc">/</span> (beta_grid[<span class="dv">2</span>] <span class="sc">-</span> beta_grid[<span class="dv">1</span>])      <span class="co"># 밀도 곡선용</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="co"># 범위 점검: 양 끝의 상대 밀도가 작아야 꼬리가 잘리지 않습니다</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"격자 양 끝의 상대 밀도:"</span>, <span class="fu">signif</span>(w_grid[<span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2000</span>)], <span class="dv">3</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>격자 양 끝의 상대 밀도: 1.93e-29 1.28e-14 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>weighted_q <span class="ot">&lt;-</span> <span class="cf">function</span>(x, w, probs) {                    <span class="co"># 가중표본의 분위수</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  o <span class="ot">&lt;-</span> <span class="fu">order</span>(x); x_s <span class="ot">&lt;-</span> x[o]; cw <span class="ot">&lt;-</span> <span class="fu">cumsum</span>(w[o]) <span class="sc">/</span> <span class="fu">sum</span>(w)</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sapply</span>(probs, <span class="cf">function</span>(p) x_s[<span class="fu">which.max</span>(cw <span class="sc">&gt;=</span> p)])</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>mean_grid <span class="ot">&lt;-</span> <span class="fu">sum</span>(beta_grid <span class="sc">*</span> p_grid); theta_grid <span class="ot">&lt;-</span> <span class="fu">sum</span>(<span class="fu">plogis</span>(beta_grid) <span class="sc">*</span> p_grid)</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>ci_grid <span class="ot">&lt;-</span> <span class="fu">weighted_q</span>(beta_grid, p_grid, <span class="fu">c</span>(<span class="fl">0.025</span>, <span class="fl">0.975</span>))</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"사후평균(beta):"</span>, <span class="fu">round</span>(mean_grid, <span class="dv">3</span>), <span class="st">" 95% 구간:"</span>, <span class="fu">round</span>(ci_grid, <span class="dv">3</span>),</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">" 사후평균(theta):"</span>, <span class="fu">round</span>(theta_grid, <span class="dv">3</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>사후평균(beta): -0.605  95% 구간: -1.262 0.023  사후평균(theta): 0.357 </code></pre>
+</div>
+</div>
+</section>
+<section id="단계.-optim으로-map와-헤시안" class="level3">
+<h3 class="anchored" data-anchor-id="단계.-optim으로-map와-헤시안">2단계. <code>optim</code>으로 MAP와 헤시안</h3>
+<p>음의 로그사후를 최소화하고 헤시안을 받아 라플라스 근사를 만든 뒤, 기준선과 겹쳐 그립니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>fit_lap <span class="ot">&lt;-</span> <span class="fu">optim</span>(<span class="at">par =</span> <span class="dv">0</span>, <span class="at">fn =</span> <span class="cf">function</span>(b) <span class="sc">-</span><span class="fu">log_post</span>(b), <span class="at">method =</span> <span class="st">"BFGS"</span>, <span class="at">hessian =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>beta_map <span class="ot">&lt;-</span> fit_lap<span class="sc">$</span>par                                  <span class="co"># 최빈값 (MAP)</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>sd_lap <span class="ot">&lt;-</span> <span class="fu">sqrt</span>(<span class="dv">1</span> <span class="sc">/</span> fit_lap<span class="sc">$</span>hessian[<span class="dv">1</span>, <span class="dv">1</span>])                <span class="co"># 헤시안 역행렬의 제곱근</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"MAP:"</span>, <span class="fu">round</span>(beta_map, <span class="dv">3</span>), <span class="st">" 라플라스 표준편차:"</span>, <span class="fu">round</span>(sd_lap, <span class="dv">3</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>MAP: -0.59  라플라스 표준편차: 0.322 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(beta_grid, dens_grid, <span class="at">type =</span> <span class="st">"l"</span>, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#1a6e3c"</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">2</span>, <span class="dv">1</span>),</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"격자 기준선 vs 라플라스 정규근사"</span>,</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">"beta (로짓 스케일)"</span>, <span class="at">ylab =</span> <span class="st">"사후 밀도"</span>)</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a><span class="fu">lines</span>(beta_grid, <span class="fu">dnorm</span>(beta_grid, beta_map, sd_lap), <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">lty =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#c0392b"</span>)</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="fu">abline</span>(<span class="at">v =</span> beta_map, <span class="at">col =</span> <span class="st">"grey60"</span>, <span class="at">lty =</span> <span class="dv">3</span>)</span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"topleft"</span>, <span class="at">bty =</span> <span class="st">"n"</span>, <span class="at">legend =</span> <span class="fu">c</span>(<span class="st">"격자 (기준선)"</span>, <span class="st">"라플라스 근사"</span>, <span class="st">"MAP"</span>),</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>       <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#1a6e3c"</span>, <span class="st">"#c0392b"</span>, <span class="st">"grey60"</span>), <span class="at">lwd =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">2</span>, <span class="dv">1</span>), <span class="at">lty =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="04_approximation_files/figure-html/laplace-fit-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p><span class="math inline">\(n=40\)</span>이면 두 곡선이 거의 겹칩니다. 다만 격자 곡선이 왼쪽으로 살짝 더 끌리는 비대칭이 남아 있습니다.</p>
+</section>
+<section id="단계.-기각표집" class="level3">
+<h3 class="anchored" data-anchor-id="단계.-기각표집">3단계. 기각표집</h3>
+<p>제안분포로 라플라스 근사를 넓힌 정규분포를 쓰고, 덮개 상수 <span class="math inline">\(M\)</span>은 격자 위에서 비 <span class="math inline">\(q/g\)</span>의 최댓값으로 잡습니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>prop_mean <span class="ot">&lt;-</span> beta_map; prop_sd <span class="ot">&lt;-</span> <span class="fl">1.6</span> <span class="sc">*</span> sd_lap           <span class="co"># 꼬리를 덮도록 넉넉하게</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>log_g_grid <span class="ot">&lt;-</span> <span class="fu">dnorm</span>(beta_grid, prop_mean, prop_sd, <span class="at">log =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>log_m <span class="ot">&lt;-</span> <span class="fu">max</span>(lp_grid <span class="sc">-</span> log_g_grid) <span class="sc">+</span> <span class="fl">0.05</span>                <span class="co"># log M (작은 여유 포함)</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>n_prop <span class="ot">&lt;-</span> <span class="dv">20000</span>; prop <span class="ot">&lt;-</span> <span class="fu">rnorm</span>(n_prop, prop_mean, prop_sd)</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>log_ratio <span class="ot">&lt;-</span> <span class="fu">log_post</span>(prop) <span class="sc">-</span> <span class="fu">dnorm</span>(prop, prop_mean, prop_sd, <span class="at">log =</span> <span class="cn">TRUE</span>) <span class="sc">-</span> log_m</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>accept <span class="ot">&lt;-</span> <span class="fu">log</span>(<span class="fu">runif</span>(n_prop)) <span class="sc">&lt;</span> log_ratio                 <span class="co"># 수용확률 q/(M g)</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>samp_rej <span class="ot">&lt;-</span> prop[accept]</span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"제안:"</span>, n_prop, <span class="st">" 채택:"</span>, <span class="fu">length</span>(samp_rej), <span class="st">" 수용률:"</span>, <span class="fu">round</span>(<span class="fu">mean</span>(accept), <span class="dv">3</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>제안: 20000  채택: 11866  수용률: 0.593 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>))</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(beta_grid, <span class="fu">exp</span>(lp_grid <span class="sc">-</span> <span class="fu">max</span>(lp_grid)), <span class="at">type =</span> <span class="st">"l"</span>, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#1a6e3c"</span>,</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlim =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">3</span>, <span class="dv">2</span>), <span class="at">main =</span> <span class="st">"덮개 Mg 와 비정규화 사후 q"</span>, <span class="at">xlab =</span> <span class="st">"beta"</span>, <span class="at">ylab =</span> <span class="st">"상대 높이"</span>)</span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a><span class="fu">lines</span>(beta_grid, <span class="fu">exp</span>(log_m <span class="sc">+</span> log_g_grid <span class="sc">-</span> <span class="fu">max</span>(lp_grid)), <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#c0392b"</span>)</span>
+<span id="cb17-5"><a href="#cb17-5" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"topright"</span>, <span class="at">bty =</span> <span class="st">"n"</span>, <span class="at">legend =</span> <span class="fu">c</span>(<span class="st">"q (비정규화 사후)"</span>, <span class="st">"M g (덮개)"</span>),</span>
+<span id="cb17-6"><a href="#cb17-6" aria-hidden="true" tabindex="-1"></a>       <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#1a6e3c"</span>, <span class="st">"#c0392b"</span>), <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb17-7"><a href="#cb17-7" aria-hidden="true" tabindex="-1"></a><span class="fu">hist</span>(samp_rej, <span class="at">breaks =</span> <span class="dv">40</span>, <span class="at">freq =</span> <span class="cn">FALSE</span>, <span class="at">border =</span> <span class="st">"white"</span>, <span class="at">col =</span> <span class="st">"grey80"</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">2</span>, <span class="dv">1</span>),</span>
+<span id="cb17-8"><a href="#cb17-8" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"기각표집 표본 vs 기준선"</span>, <span class="at">xlab =</span> <span class="st">"beta"</span>, <span class="at">ylab =</span> <span class="st">"밀도"</span>)</span>
+<span id="cb17-9"><a href="#cb17-9" aria-hidden="true" tabindex="-1"></a><span class="fu">lines</span>(beta_grid, dens_grid, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#1a6e3c"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="04_approximation_files/figure-html/rejection-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>수용률은 <span class="math inline">\(m(y)/M\)</span>과 같습니다. 1차원이고 제안분포가 사후와 거의 같은 모양이라 60% 가까이 나옵니다. 같은 방식이라도 10차원에서 축마다 제안이 조금씩 어긋나면 그 불일치가 곱으로 누적되어 수용률이 사실상 0이 됩니다.</p>
+</section>
+<section id="단계.-중요도표집과-ess" class="level3">
+<h3 class="anchored" data-anchor-id="단계.-중요도표집과-ess">4단계. 중요도표집과 ESS</h3>
+<p>같은 제안분포에서 뽑되 버리지 않고 가중치를 줍니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb18"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>n_is <span class="ot">&lt;-</span> <span class="dv">20000</span>; prop_is <span class="ot">&lt;-</span> <span class="fu">rnorm</span>(n_is, prop_mean, prop_sd)</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a>log_w <span class="ot">&lt;-</span> <span class="fu">log_post</span>(prop_is) <span class="sc">-</span> <span class="fu">dnorm</span>(prop_is, prop_mean, prop_sd, <span class="at">log =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a>w_norm <span class="ot">&lt;-</span> <span class="fu">exp</span>(log_w <span class="sc">-</span> <span class="fu">max</span>(log_w))                        <span class="co"># 스케일은 자기정규화로 상쇄</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>w_norm <span class="ot">&lt;-</span> w_norm <span class="sc">/</span> <span class="fu">sum</span>(w_norm)</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>ess <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">/</span> <span class="fu">sum</span>(w_norm<span class="sc">^</span><span class="dv">2</span>)                                 <span class="co"># = (sum w)^2 / sum(w^2)</span></span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>mean_is <span class="ot">&lt;-</span> <span class="fu">sum</span>(w_norm <span class="sc">*</span> prop_is)</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a>ci_is <span class="ot">&lt;-</span> <span class="fu">weighted_q</span>(prop_is, w_norm, <span class="fu">c</span>(<span class="fl">0.025</span>, <span class="fl">0.975</span>))</span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>theta_is <span class="ot">&lt;-</span> <span class="fu">sum</span>(w_norm <span class="sc">*</span> <span class="fu">plogis</span>(prop_is))</span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"표본 수:"</span>, n_is, <span class="st">" ESS:"</span>, <span class="fu">round</span>(ess, <span class="dv">1</span>), <span class="st">" 효율:"</span>, <span class="fu">round</span>(ess <span class="sc">/</span> n_is, <span class="dv">3</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>표본 수: 20000  ESS: 15907.6  효율: 0.795 </code></pre>
+</div>
+</div>
+<p>제안분포의 폭을 좁게·넓게 바꿔 가며 ESS가 어떻게 변하는지 봅니다.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb20"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a>scales <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.4</span>, <span class="fl">0.7</span>, <span class="fl">1.0</span>, <span class="fl">1.6</span>, <span class="fl">3.0</span>, <span class="fl">6.0</span>); n_scan <span class="ot">&lt;-</span> <span class="dv">5000</span>  <span class="co"># 라플라스 표준편차의 배수</span></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>ess_vec <span class="ot">&lt;-</span> <span class="fu">numeric</span>(<span class="fu">length</span>(scales)); max_w <span class="ot">&lt;-</span> <span class="fu">numeric</span>(<span class="fu">length</span>(scales))</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_along</span>(scales)) {</span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a>  s_i <span class="ot">&lt;-</span> scales[i] <span class="sc">*</span> sd_lap</span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a>  x_i <span class="ot">&lt;-</span> <span class="fu">rnorm</span>(n_scan, prop_mean, s_i)</span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>  lw_i <span class="ot">&lt;-</span> <span class="fu">log_post</span>(x_i) <span class="sc">-</span> <span class="fu">dnorm</span>(x_i, prop_mean, s_i, <span class="at">log =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a>  ww_i <span class="ot">&lt;-</span> <span class="fu">exp</span>(lw_i <span class="sc">-</span> <span class="fu">max</span>(lw_i)); ww_i <span class="ot">&lt;-</span> ww_i <span class="sc">/</span> <span class="fu">sum</span>(ww_i)</span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>  ess_vec[i] <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">/</span> <span class="fu">sum</span>(ww_i<span class="sc">^</span><span class="dv">2</span>); max_w[i] <span class="ot">&lt;-</span> <span class="fu">max</span>(ww_i)   <span class="co"># 최대 가중치 점유율</span></span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">data.frame</span>(<span class="at">scale =</span> scales, <span class="at">ess =</span> <span class="fu">round</span>(ess_vec, <span class="dv">1</span>),</span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>                 <span class="at">efficiency =</span> <span class="fu">round</span>(ess_vec <span class="sc">/</span> n_scan, <span class="dv">3</span>), <span class="at">max_weight =</span> <span class="fu">round</span>(max_w, <span class="dv">4</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  scale    ess efficiency max_weight
+1   0.4  572.0      0.114     0.0192
+2   0.7 1623.5      0.325     0.0134
+3   1.0 4980.4      0.996     0.0004
+4   1.6 3959.1      0.792     0.0003
+5   3.0 2238.7      0.448     0.0006
+6   6.0 1160.4      0.232     0.0012</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb22"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>))</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a><span class="fu">hist</span>(w_norm <span class="sc">*</span> n_is, <span class="at">breaks =</span> <span class="dv">60</span>, <span class="at">col =</span> <span class="st">"grey80"</span>, <span class="at">border =</span> <span class="st">"white"</span>,</span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"정규화 가중치 분포"</span>, <span class="at">xlab =</span> <span class="st">"S x w (1이면 균등)"</span>, <span class="at">ylab =</span> <span class="st">"빈도"</span>)</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a><span class="fu">abline</span>(<span class="at">v =</span> <span class="dv">1</span>, <span class="at">col =</span> <span class="st">"#c0392b"</span>, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">lty =</span> <span class="dv">2</span>)</span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(scales, ess_vec <span class="sc">/</span> n_scan, <span class="at">type =</span> <span class="st">"b"</span>, <span class="at">pch =</span> <span class="dv">19</span>, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#2c7fb8"</span>, <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">1</span>),</span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"제안분포 폭과 유효표본 비율"</span>,</span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">"제안 표준편차 / 라플라스 표준편차"</span>, <span class="at">ylab =</span> <span class="st">"ESS / S"</span>)</span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a><span class="fu">abline</span>(<span class="at">h =</span> <span class="dv">1</span>, <span class="at">col =</span> <span class="st">"grey60"</span>, <span class="at">lty =</span> <span class="dv">3</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="04_approximation_files/figure-html/ess-scan-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+</div>
+<p>제안분포의 폭이 사후와 비슷할 때(1.0배) 효율이 0.996으로 최대이고, 양쪽 어느 방향으로 벗어나도 떨어집니다. 좁은 쪽은 0.7배에서 0.325, 0.4배에서 0.114로 급락하고, 넓은 쪽은 1.6배에서 0.792, 3.0배에서 0.448, 6.0배에서 0.232로 완만하게 내려갑니다. 좁으면 제안분포 꼬리가 사후보다 얇아 소수의 점이 가중치를 독식하고, 넓으면 대부분의 점이 사후가 거의 0인 곳에 떨어져 낭비됩니다. 다만 폭을 사후에 정확히 맞추는 것이 실무 지침은 아닙니다. 정규 제안분포는 좁은 쪽으로 어긋나는 순간 <span class="math inline">\(w=q/g\)</span>의 분산이 발산하고 ESS는 그 위험을 늦게 알려 줍니다. 그래서 실무에서는 폭을 맞추려 애쓰기보다 꼬리가 두꺼운 <span class="math inline">\(t\)</span> 제안분포를 써서 좁은 쪽 실패 자체를 막습니다(연습문제 3 참고).</p>
+</section>
+<section id="단계.-네-방법-결과-비교" class="level3">
+<h3 class="anchored" data-anchor-id="단계.-네-방법-결과-비교">5단계. 네 방법 결과 비교</h3>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb23"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>); samp_lap <span class="ot">&lt;-</span> <span class="fu">rnorm</span>(<span class="dv">20000</span>, beta_map, sd_lap) <span class="co"># 라플라스 근사의 theta 평균용</span></span>
+<span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">method =</span> <span class="fu">c</span>(<span class="st">"grid"</span>, <span class="st">"laplace"</span>, <span class="st">"rejection"</span>, <span class="st">"importance"</span>),</span>
+<span id="cb23-4"><a href="#cb23-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">mean_beta =</span> <span class="fu">c</span>(mean_grid, beta_map, <span class="fu">mean</span>(samp_rej), mean_is),</span>
+<span id="cb23-5"><a href="#cb23-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">lower =</span> <span class="fu">c</span>(ci_grid[<span class="dv">1</span>], beta_map <span class="sc">-</span> <span class="fl">1.96</span> <span class="sc">*</span> sd_lap, <span class="fu">quantile</span>(samp_rej, <span class="fl">0.025</span>), ci_is[<span class="dv">1</span>]),</span>
+<span id="cb23-6"><a href="#cb23-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">upper =</span> <span class="fu">c</span>(ci_grid[<span class="dv">2</span>], beta_map <span class="sc">+</span> <span class="fl">1.96</span> <span class="sc">*</span> sd_lap, <span class="fu">quantile</span>(samp_rej, <span class="fl">0.975</span>), ci_is[<span class="dv">2</span>]),</span>
+<span id="cb23-7"><a href="#cb23-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">mean_theta =</span> <span class="fu">c</span>(theta_grid, <span class="fu">mean</span>(<span class="fu">plogis</span>(samp_lap)), <span class="fu">mean</span>(<span class="fu">plogis</span>(samp_rej)), theta_is))</span>
+<span id="cb23-8"><a href="#cb23-8" aria-hidden="true" tabindex="-1"></a>res[, <span class="dv">2</span><span class="sc">:</span><span class="dv">5</span>] <span class="ot">&lt;-</span> <span class="fu">round</span>(res[, <span class="dv">2</span><span class="sc">:</span><span class="dv">5</span>], <span class="dv">3</span>)</span>
+<span id="cb23-9"><a href="#cb23-9" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(res, <span class="at">row.names =</span> <span class="cn">FALSE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>     method mean_beta  lower upper mean_theta
+       grid    -0.605 -1.262 0.023      0.357
+    laplace    -0.590 -1.222 0.042      0.359
+  rejection    -0.604 -1.262 0.033      0.357
+ importance    -0.605 -1.264 0.023      0.357</code></pre>
+</div>
+</div>
+<p>네 값이 소수점 둘째 자리까지 거의 일치합니다. 다만 라플라스의 <code>mean_beta</code>는 사후평균이 아니라 최빈값이며, 사후가 비대칭이면 둘은 달라집니다.</p>
+</section>
+</section>
+<section id="연습문제" class="level2">
+<h2 class="anchored" data-anchor-id="연습문제">연습문제</h2>
+<p><strong>문제 1.</strong> 모수 두 개 <span class="math inline">\((\beta_0,\beta_1)\)</span>을 각 축 200등분한 2차원 격자를 만든다고 합시다. 격자점당 로그사후 평가에 20마이크로초가 걸린다면 총 몇 초가 걸립니까? 같은 정밀도를 모수 6개에 적용하면 어떻게 됩니까?</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-10-contents" aria-controls="callout-10" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+풀이
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-10" class="callout-10-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="cell">
+<div class="sourceCode cell-code" id="cb25"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a>g <span class="ot">&lt;-</span> <span class="dv">200</span>; cost <span class="ot">&lt;-</span> <span class="fl">20e-6</span>                                  <span class="co"># 축당 등분 수, 평가 1회당 초</span></span>
+<span id="cb25-2"><a href="#cb25-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (d <span class="cf">in</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">6</span>)) {</span>
+<span id="cb25-3"><a href="#cb25-3" aria-hidden="true" tabindex="-1"></a>  total_sec <span class="ot">&lt;-</span> g<span class="sc">^</span>d <span class="sc">*</span> cost</span>
+<span id="cb25-4"><a href="#cb25-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">cat</span>(<span class="st">"d ="</span>, d, <span class="st">" 격자점:"</span>, <span class="fu">signif</span>(g<span class="sc">^</span>d, <span class="dv">3</span>), <span class="st">" 초:"</span>, <span class="fu">signif</span>(total_sec, <span class="dv">3</span>),</span>
+<span id="cb25-5"><a href="#cb25-5" aria-hidden="true" tabindex="-1"></a>      <span class="st">" 년:"</span>, <span class="fu">signif</span>(total_sec <span class="sc">/</span> <span class="fl">3.156e7</span>, <span class="dv">3</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span>
+<span id="cb25-6"><a href="#cb25-6" aria-hidden="true" tabindex="-1"></a>}</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>d = 2  격자점: 40000  초: 0.8  년: 2.53e-08 
+d = 6  격자점: 6.4e+13  초: 1.28e+09  년: 40.6 </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb27"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"축당 50등분으로 낮추면 d = 6 일 때 일수:"</span>, <span class="fu">signif</span>(<span class="dv">50</span><span class="sc">^</span><span class="dv">6</span> <span class="sc">*</span> cost <span class="sc">/</span> <span class="dv">86400</span>, <span class="dv">3</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>축당 50등분으로 낮추면 d = 6 일 때 일수: 3.62 </code></pre>
+</div>
+</div>
+<p>2차원은 4만 점, 0.8초로 아무 문제가 없습니다. 6차원은 <span class="math inline">\(6.4\times10^{13}\)</span> 점이 되어 약 41년이 걸립니다. 축당 등분 수를 50으로 줄여도 사흘 반이 걸리면서 정밀도만 잃습니다. 격자 근사는 차원을 늘리는 방향으로는 어떤 타협도 통하지 않습니다.</p>
+</div>
+</div>
+</div>
+<p><strong>문제 2.</strong> 표본이 매우 작고 관측값이 경계에 붙은 경우(<span class="math inline">\(y=0\)</span>, <span class="math inline">\(n=4\)</span>)에 약한 사전 <span class="math inline">\(\beta\sim N(0,5^2)\)</span>을 쓰면 라플라스 근사가 얼마나 빗나갑니까? 격자 기준선과 겹쳐 그리고 <span class="math inline">\(P(\theta&lt;0.1\mid y)\)</span>를 두 방법으로 비교하십시오.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-11-contents" aria-controls="callout-11" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+풀이
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-11" class="callout-11-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="cell">
+<div class="sourceCode cell-code" id="cb29"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" aria-hidden="true" tabindex="-1"></a>lp_small <span class="ot">&lt;-</span> <span class="cf">function</span>(b) <span class="sc">-</span><span class="dv">4</span> <span class="sc">*</span> <span class="fu">log1pexp</span>(b) <span class="sc">+</span> <span class="fu">dnorm</span>(b, <span class="dv">0</span>, <span class="dv">5</span>, <span class="at">log =</span> <span class="cn">TRUE</span>)  <span class="co"># y=0, n=4</span></span>
+<span id="cb29-2"><a href="#cb29-2" aria-hidden="true" tabindex="-1"></a>bg2 <span class="ot">&lt;-</span> <span class="fu">seq</span>(<span class="sc">-</span><span class="dv">25</span>, <span class="dv">5</span>, <span class="at">length.out =</span> <span class="dv">4000</span>)                    <span class="co"># 왼쪽 꼬리가 길어 범위를 넓게</span></span>
+<span id="cb29-3"><a href="#cb29-3" aria-hidden="true" tabindex="-1"></a>p2 <span class="ot">&lt;-</span> <span class="fu">exp</span>(<span class="fu">lp_small</span>(bg2) <span class="sc">-</span> <span class="fu">max</span>(<span class="fu">lp_small</span>(bg2))); p2 <span class="ot">&lt;-</span> p2 <span class="sc">/</span> <span class="fu">sum</span>(p2)</span>
+<span id="cb29-4"><a href="#cb29-4" aria-hidden="true" tabindex="-1"></a>fit2 <span class="ot">&lt;-</span> <span class="fu">optim</span>(<span class="at">par =</span> <span class="dv">0</span>, <span class="at">fn =</span> <span class="cf">function</span>(b) <span class="sc">-</span><span class="fu">lp_small</span>(b), <span class="at">method =</span> <span class="st">"BFGS"</span>, <span class="at">hessian =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb29-5"><a href="#cb29-5" aria-hidden="true" tabindex="-1"></a>map2 <span class="ot">&lt;-</span> fit2<span class="sc">$</span>par; sd2 <span class="ot">&lt;-</span> <span class="fu">sqrt</span>(<span class="dv">1</span> <span class="sc">/</span> fit2<span class="sc">$</span>hessian[<span class="dv">1</span>, <span class="dv">1</span>])</span>
+<span id="cb29-6"><a href="#cb29-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb29-7"><a href="#cb29-7" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(bg2, p2 <span class="sc">/</span> (bg2[<span class="dv">2</span>] <span class="sc">-</span> bg2[<span class="dv">1</span>]), <span class="at">type =</span> <span class="st">"l"</span>, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#1a6e3c"</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="sc">-</span><span class="dv">20</span>, <span class="dv">5</span>),</span>
+<span id="cb29-8"><a href="#cb29-8" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"소표본 경계값에서 라플라스 근사의 실패"</span>, <span class="at">xlab =</span> <span class="st">"beta"</span>, <span class="at">ylab =</span> <span class="st">"사후 밀도"</span>)</span>
+<span id="cb29-9"><a href="#cb29-9" aria-hidden="true" tabindex="-1"></a><span class="fu">lines</span>(bg2, <span class="fu">dnorm</span>(bg2, map2, sd2), <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">lty =</span> <span class="dv">2</span>, <span class="at">col =</span> <span class="st">"#c0392b"</span>)</span>
+<span id="cb29-10"><a href="#cb29-10" aria-hidden="true" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">"topleft"</span>, <span class="at">bty =</span> <span class="st">"n"</span>, <span class="at">legend =</span> <span class="fu">c</span>(<span class="st">"격자 (기준선)"</span>, <span class="st">"라플라스 근사"</span>),</span>
+<span id="cb29-11"><a href="#cb29-11" aria-hidden="true" tabindex="-1"></a>       <span class="at">col =</span> <span class="fu">c</span>(<span class="st">"#1a6e3c"</span>, <span class="st">"#c0392b"</span>), <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">lty =</span> <span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="04_approximation_files/figure-html/ex2-1.png" class="img-fluid figure-img" width="1200"></p>
+</figure>
+</div>
+</div>
+<div class="sourceCode cell-code" id="cb30"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>cut_beta <span class="ot">&lt;-</span> <span class="fu">qlogis</span>(<span class="fl">0.1</span>)                                  <span class="co"># theta = 0.1 에 해당하는 beta</span></span>
+<span id="cb30-2"><a href="#cb30-2" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"MAP:"</span>, <span class="fu">round</span>(map2, <span class="dv">2</span>), <span class="st">" 라플라스 sd:"</span>, <span class="fu">round</span>(sd2, <span class="dv">2</span>),</span>
+<span id="cb30-3"><a href="#cb30-3" aria-hidden="true" tabindex="-1"></a>    <span class="st">" P(theta&lt;0.1) 격자:"</span>, <span class="fu">round</span>(<span class="fu">sum</span>(p2[bg2 <span class="sc">&lt;</span> cut_beta]), <span class="dv">3</span>),</span>
+<span id="cb30-4"><a href="#cb30-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">" 라플라스:"</span>, <span class="fu">round</span>(<span class="fu">pnorm</span>(cut_beta, map2, sd2), <span class="dv">3</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>MAP: -3.36  라플라스 sd: 2.43  P(theta&lt;0.1) 격자: 0.841  라플라스: 0.684 </code></pre>
+</div>
+</div>
+<p><span class="math inline">\(y=0\)</span>이면 가능도는 <span class="math inline">\(\beta\)</span>가 작아질수록 커지기만 하고, 왼쪽을 막아 주는 것은 약한 사전뿐입니다. 그 결과 사후는 왼쪽으로 심하게 늘어진 비대칭 분포가 됩니다. 라플라스는 이를 대칭 정규분포로 바꾸면서 오른쪽 꼬리에 없는 확률을 만들고 왼쪽 꼬리는 잘라냅니다. 꼬리확률처럼 분포의 끝을 쓰는 요약통계일수록 오차가 커집니다.</p>
+</div>
+</div>
+</div>
+<p><strong>문제 3.</strong> 4단계 스캔에서 효율이 가장 나빴던 쪽(0.4배)과 마찬가지로 좁은 0.5배 제안분포를 쓰되, 정규분포 대신 자유도 3인 <span class="math inline">\(t\)</span> 분포로 바꾸면 ESS가 개선됩니까? 두 제안분포의 ESS와 최대 가중치 점유율을 비교하십시오.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center" data-bs-toggle="collapse" data-bs-target=".callout-12-contents" aria-controls="callout-12" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+풀이
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-12" class="callout-12-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<div class="cell">
+<div class="sourceCode cell-code" id="cb32"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">42</span>)</span>
+<span id="cb32-2"><a href="#cb32-2" aria-hidden="true" tabindex="-1"></a>n_ex <span class="ot">&lt;-</span> <span class="dv">10000</span>; s_ex <span class="ot">&lt;-</span> <span class="fl">0.5</span> <span class="sc">*</span> sd_lap                      <span class="co"># 일부러 좁은 척도</span></span>
+<span id="cb32-3"><a href="#cb32-3" aria-hidden="true" tabindex="-1"></a>x_norm <span class="ot">&lt;-</span> <span class="fu">rnorm</span>(n_ex, prop_mean, s_ex)                   <span class="co"># (a) 정규 제안분포</span></span>
+<span id="cb32-4"><a href="#cb32-4" aria-hidden="true" tabindex="-1"></a>lw_n <span class="ot">&lt;-</span> <span class="fu">log_post</span>(x_norm) <span class="sc">-</span> <span class="fu">dnorm</span>(x_norm, prop_mean, s_ex, <span class="at">log =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb32-5"><a href="#cb32-5" aria-hidden="true" tabindex="-1"></a>ww_n <span class="ot">&lt;-</span> <span class="fu">exp</span>(lw_n <span class="sc">-</span> <span class="fu">max</span>(lw_n)); ww_n <span class="ot">&lt;-</span> ww_n <span class="sc">/</span> <span class="fu">sum</span>(ww_n)</span>
+<span id="cb32-6"><a href="#cb32-6" aria-hidden="true" tabindex="-1"></a>x_t <span class="ot">&lt;-</span> prop_mean <span class="sc">+</span> s_ex <span class="sc">*</span> <span class="fu">rt</span>(n_ex, <span class="at">df =</span> <span class="dv">3</span>)               <span class="co"># (b) 자유도 3인 t 제안분포</span></span>
+<span id="cb32-7"><a href="#cb32-7" aria-hidden="true" tabindex="-1"></a>lw_t <span class="ot">&lt;-</span> <span class="fu">log_post</span>(x_t) <span class="sc">-</span> <span class="fu">dt</span>((x_t <span class="sc">-</span> prop_mean) <span class="sc">/</span> s_ex, <span class="at">df =</span> <span class="dv">3</span>, <span class="at">log =</span> <span class="cn">TRUE</span>) <span class="sc">+</span> <span class="fu">log</span>(s_ex)</span>
+<span id="cb32-8"><a href="#cb32-8" aria-hidden="true" tabindex="-1"></a>ww_t <span class="ot">&lt;-</span> <span class="fu">exp</span>(lw_t <span class="sc">-</span> <span class="fu">max</span>(lw_t)); ww_t <span class="ot">&lt;-</span> ww_t <span class="sc">/</span> <span class="fu">sum</span>(ww_t)  <span class="co"># 위치-척도 변환에 1/s 보정</span></span>
+<span id="cb32-9"><a href="#cb32-9" aria-hidden="true" tabindex="-1"></a><span class="fu">print</span>(<span class="fu">data.frame</span>(<span class="at">proposal =</span> <span class="fu">c</span>(<span class="st">"normal"</span>, <span class="st">"t(df=3)"</span>),</span>
+<span id="cb32-10"><a href="#cb32-10" aria-hidden="true" tabindex="-1"></a>                 <span class="at">ess =</span> <span class="fu">round</span>(<span class="fu">c</span>(<span class="dv">1</span> <span class="sc">/</span> <span class="fu">sum</span>(ww_n<span class="sc">^</span><span class="dv">2</span>), <span class="dv">1</span> <span class="sc">/</span> <span class="fu">sum</span>(ww_t<span class="sc">^</span><span class="dv">2</span>)), <span class="dv">1</span>),</span>
+<span id="cb32-11"><a href="#cb32-11" aria-hidden="true" tabindex="-1"></a>                 <span class="at">max_weight =</span> <span class="fu">round</span>(<span class="fu">c</span>(<span class="fu">max</span>(ww_n), <span class="fu">max</span>(ww_t)), <span class="dv">4</span>),</span>
+<span id="cb32-12"><a href="#cb32-12" aria-hidden="true" tabindex="-1"></a>                 <span class="at">mean_beta =</span> <span class="fu">round</span>(<span class="fu">c</span>(<span class="fu">sum</span>(ww_n <span class="sc">*</span> x_norm), <span class="fu">sum</span>(ww_t <span class="sc">*</span> x_t)), <span class="dv">3</span>)),</span>
+<span id="cb32-13"><a href="#cb32-13" aria-hidden="true" tabindex="-1"></a>      <span class="at">row.names =</span> <span class="cn">FALSE</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code> proposal    ess max_weight mean_beta
+   normal  286.5     0.0495    -0.572
+  t(df=3) 7007.5     0.0003    -0.605</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb34"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cat</span>(<span class="st">"격자 기준선 사후평균:"</span>, <span class="fu">round</span>(mean_grid, <span class="dv">3</span>), <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>격자 기준선 사후평균: -0.605 </code></pre>
+</div>
+</div>
+<p>척도가 같아도 <span class="math inline">\(t\)</span> 분포는 꼬리가 두꺼워 사후의 꼬리 영역에도 제안점을 공급합니다. 그 결과 <span class="math inline">\(w=q/g\)</span>가 꼬리에서 폭발하지 않아 최대 가중치 점유율이 내려가고 ESS가 크게 올라갑니다. 추정된 사후평균도 기준선에 더 가깝습니다. 제안분포를 고를 때 위치와 척도보다 <strong>꼬리의 두께</strong>가 먼저라는 것이 핵심입니다.</p>
+</div>
+</div>
+</div>
+</section>
+<section id="정리" class="level2">
+<h2 class="anchored" data-anchor-id="정리">정리</h2>
+<ul>
+<li>켤레가 아니면 <span class="math inline">\(m(y)=\int p(y\mid\theta)p(\theta)d\theta\)</span>를 풀 수 없지만 비정규화 사후 <span class="math inline">\(q(\theta)=p(y\mid\theta)p(\theta)\)</span>는 언제나 계산할 수 있습니다. 이번 주의 모든 방법이 여기서 출발합니다.</li>
+<li>격자 근사는 1~2차원에서 사실상 정답이고 기준선으로 쓰기 좋습니다. 격자점이 <span class="math inline">\(G^d\)</span>로 늘어나 3차원을 넘기면 쓸 수 없습니다.</li>
+<li>라플라스 근사는 <code>optim(..., hessian = TRUE)</code> 한 번으로 끝나고 고차원에서도 빠릅니다. 대신 사후가 비대칭·다봉이거나 표본이 작으면 꼬리확률부터 크게 틀립니다.</li>
+<li>기각표집은 정확한 독립표본을 주지만 덮개 상수 <span class="math inline">\(M\)</span>이 필요하고 차원이 오르면 수용률이 지수적으로 떨어집니다. 중요도표집은 모든 표본을 쓰지만 품질이 제안분포에 달려 있어 ESS <span class="math inline">\(=(\sum w)^2/\sum w^2\)</span>를 반드시 확인해야 하고, 꼬리가 두꺼운 <span class="math inline">\(t\)</span> 제안분포를 기본으로 삼습니다.</li>
+<li>셋은 모수 공간 전체를 덮으려 하고 하나는 모양을 정규분포로 고정합니다. 고차원 사후를 다루려면 전혀 다른 전략이 필요합니다.</li>
+</ul>
+</section>
+<section id="다음-시간" class="level2">
+<h2 class="anchored" data-anchor-id="다음-시간">다음 시간</h2>
+<p><a href="../chapters/05_mcmc_basics.html">W5</a>에서는 마르코프 연쇄 몬테카를로(MCMC)를 다룹니다. 전역 제안분포 없이 현재 위치에서 다음 위치로 이동하며 사후를 탐색하는 메트로폴리스-헤이스팅스(Metropolis-Hastings) 알고리즘을 base R로 직접 구현하고, 이번 주의 격자 기준선과 같은 결과가 나오는지 확인합니다. 표본이 독립이 아니라는 대가 때문에 새로 필요해지는 수렴 진단(trace plot, 자기상관, <span class="math inline">\(\hat{R}\)</span>)도 함께 봅니다.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<!-- AI Chat Widget 초기화 -->
+
+<!-- _quarto.yml의 include-after-body에 등록되어 모든 페이지에 자동 삽입됩니다 -->
+
+<script>
+
+  // ★ Cloudflare Worker 배포 후 URL로 교체하세요
+
+  const WORKER_URL = "https://falling-wave-447f.eh0129s.workers.dev/";
+
+
+
+  // 각 .qmd 파일의 YAML에서 ai-context를 읽어옵니다
+
+  // (없으면 빈 문자열 → 기본 안내 메시지)
+
+  const metaContext = document.querySelector('meta[name="ai-context"]');
+
+  const metaTitle   = document.querySelector('meta[name="ai-title"]') || { content: document.title };
+
+
+
+  window.AI_CHAT_CONFIG = {
+
+    workerUrl:      WORKER_URL,
+
+    chapterContext: metaContext ? metaContext.content : "",
+
+    chapterTitle:   metaTitle  ? metaTitle.content   : document.title,
+
+  };
+
+</script>
+
+<script src="../_extensions/ai-chat/ai-chat.js" defer=""></script>
+
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+<p>Copyright 2026, Eunji</p>
+</div>   
+    <div class="nav-footer-center">
+      &nbsp;
+    </div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+<script src="../site_libs/quarto-html/zenscroll-min.js"></script>
+</body></html>
