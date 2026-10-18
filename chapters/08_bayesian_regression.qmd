@@ -123,6 +123,15 @@ $\lambda = 4.77$에서 36개 계수가 정확히 0이고, 그 계수들의 $|x_j
 **희소성은 MAP의 성질이지 사후분포의 성질이 아닙니다.** Park & Casella(2008)의 베이지안 lasso는 같은 Laplace 사전분포로 사후분포 전체를 표집합니다. 연속 사전분포 아래에서는 $\Pr(\beta_j = 0 \mid y) = 0$이므로 사후표본은 절대 정확히 0이 아니고 사후평균도 0이 아닙니다. "베이지안 lasso를 돌렸더니 변수가 선택되었다"는 말은 성립하지 않습니다. 또 Laplace 사전분포는 꼬리가 지수적으로만 두꺼워서 **큰 효과도 일정량 깎습니다**. 아래 축소 곡선에서 lasso와 베이지안 lasso가 큰 $y$에서도 대각선보다 $\sigma^2/b$(그림의 설정에서는 1)만큼 아래에 있는 것이 그 편향입니다.
 :::
 
+**직접 해 보기** — [Ridge와 Lasso: λ와 수축 ↗](https://kkonoo.github.io/edu_sims/sims/ridge-lasso/?lang=ko){target="_blank"}
+
+::: {.column-page}
+```{=html}
+<iframe src="https://kkonoo.github.io/edu_sims/sims/ridge-lasso/?embed=1&lang=ko" title="Ridge와 Lasso: λ와 수축" loading="lazy"
+        style="width: 100%; height: 1300px; border: 0;"></iframe>
+```
+:::
+
 ## Horseshoe: 전역 척도로 누르고 국소 척도로 빠져나가기
 
 원하는 것은 둘입니다. 잡음 계수는 0으로 세게 누르고, 큰 신호는 거의 건드리지 않는 것. Carvalho, Polson & Scott(2010)의 horseshoe는 계수마다 **국소 척도(local scale)** $\lambda_j$를 따로 주고 모두가 **전역 척도(global scale)** $\tau$를 공유하게 합니다. $\tau$가 작으면 모든 계수가 0 쪽으로 눌리고, $\lambda_j$는 반코시(half-Cauchy)라서 꼬리가 매우 두꺼우므로 데이터가 강하게 요구하는 몇 개만 이 압력에서 빠져나갑니다. W7이 $\tau$ 하나로 모든 그룹을 묶었다면, horseshoe는 **계수마다 자기 척도를 하나씩 더 가진 계층 모형**입니다.

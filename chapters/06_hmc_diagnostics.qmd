@@ -52,6 +52,15 @@ $d=1$이면 표본의 68%가 반지름 1 안에 있지만 $d=20$에서는 사실
 $d$차원 표준정규에서 반지름 $r=\lVert x\rVert$ 의 밀도는 $p(r) \propto r^{d-1} e^{-r^2/2}$ 입니다. 부피 항 $r^{d-1}$은 급격히 증가하고 밀도 항 $e^{-r^2/2}$는 급격히 감소하므로, 곱은 $r \approx \sqrt{d-1}$ 에서 최대가 되고 폭은 $O(1)$ 로 유지됩니다. 즉 확률질량은 반지름 $\sqrt{d}$ 부근의 두께 $O(1)$ 짜리 껍질에 집중되며, 이것이 전형집합입니다.
 :::
 
+**직접 해 보기** — [MCMC: 제안 폭과 체인의 움직임 ↗](https://kkonoo.github.io/edu_sims/sims/mcmc/?lang=ko){target="_blank"}
+
+::: {.column-page}
+```{=html}
+<iframe src="https://kkonoo.github.io/edu_sims/sims/mcmc/?embed=1&lang=ko" title="MCMC: 제안 폭과 체인의 움직임" loading="lazy"
+        style="width: 100%; height: 1300px; border: 0;"></iframe>
+```
+:::
+
 ## 해밀토니안 몬테카를로(HMC)
 
 HMC는 어디가 껍질인지를 **로그사후의 기울기(gradient)** 로 알아냅니다. 밀도가 높아지는 방향을 알면 무작정 흔드는 대신 껍질을 따라 미끄러지는 궤적을 만들 수 있습니다. 물리 비유가 정확합니다. 모수 $\theta$를 **위치(position)**, 같은 차원의 보조변수 $p$를 **운동량(momentum)** 이라 부르고, 퍼텐셜 에너지 $U(\theta)=-\log p(\theta\mid y)$ 와 운동 에너지 $K(p)=\tfrac12\sum p_i^2$ 의 합인 해밀토니안 $H=U+K$ 는 이상적인 물리계에서 보존됩니다. 한 번의 반복은 (1) 운동량을 표준정규에서 새로 뽑고, (2) 보폭 $\varepsilon$로 **leapfrog** 적분기를 $L$번 돌려 궤적을 따라가고, (3) 도착점을 제안값으로 삼아 $\min(1, e^{H_0-H_1})$ 로 수용 여부를 정합니다. 적분이 완벽하면 $H_1=H_0$ 이라 수용확률이 1입니다. leapfrog는 완벽하지 않지만 오차가 누적되지 않게 설계되어 있어서, 잘 조율하면 **멀리 이동하면서도 높은 수용률** 을 유지합니다. 랜덤워크가 보폭과 수용률을 맞바꿔야 했던 것과 대비됩니다. 이론적으로 계산 비용까지 따진 최적 수용률은 약 0.65이고(Beskos et al. 2013), Stan의 `adapt_delta = 0.8`은 그보다 보수적인, 안정성을 위한 실무 기본값입니다.

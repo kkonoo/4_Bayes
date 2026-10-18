@@ -97,6 +97,15 @@ $$ \log \alpha = \min\Big(0,\ \ell(\theta') + \log p(\theta') - \ell(\theta) - \
 수용률이 높을수록 좋은 체인이라고 생각하기 쉽지만 반대입니다. 수용률 95퍼센트는 대개 제안 폭이 너무 좁아 체인이 거의 움직이지 않는다는 신호입니다. 보아야 할 것은 수용률 자체가 아니라 trace plot이 잘 섞이는지, 자기상관이 빨리 떨어지는지입니다. 수용률은 그 둘을 조정하는 손잡이일 뿐입니다.
 :::
 
+**직접 해 보기** — [MCMC: 제안 폭과 체인의 움직임 ↗](https://kkonoo.github.io/edu_sims/sims/mcmc/?lang=ko){target="_blank"}
+
+::: {.column-page}
+```{=html}
+<iframe src="https://kkonoo.github.io/edu_sims/sims/mcmc/?embed=1&lang=ko" title="MCMC: 제안 폭과 체인의 움직임" loading="lazy"
+        style="width: 100%; height: 1300px; border: 0;"></iframe>
+```
+:::
+
 ## Gibbs 표집: 조건부만 알면 된다
 
 모수가 여럿일 때 전체 사후분포에서 한꺼번에 뽑기는 어려워도, 나머지를 모두 고정했을 때 하나의 조건부분포는 익숙한 분포가 되는 경우가 많습니다. 이것을 완전조건부분포(full conditional distribution)라고 합니다. Gibbs 표집(Gibbs sampling)은 모수를 하나씩 차례로 그 완전조건부에서 뽑습니다. 제안도 수용/기각도 없어 모든 걸음이 항상 받아들여집니다. 사실 Gibbs는 수용확률이 항상 1이 되도록 제안분포를 고른 MH의 특수한 경우입니다.

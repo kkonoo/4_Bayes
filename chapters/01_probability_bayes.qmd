@@ -207,6 +207,15 @@ $$
 로 근사합니다. 격자를 촘촘히 할수록 정확해지지만, 모수가 한두 개일 때만 실용적입니다. 이 챕터에서는 격자 사후를 $\Delta$로 나눈 **밀도**로 씁니다. [W4](04_approximation.qmd)에서는 같은 기호를 격자점의 **확률질량**(나누지 않은 값)으로 정의하므로 두 주차의 식을 나란히 볼 때 주의하십시오.
 :::
 
+**직접 해 보기** — [사전분포 × 가능도 → 사후분포 ↗](https://kkonoo.github.io/edu_sims/sims/prior-posterior/?lang=ko){target="_blank"}
+
+::: {.column-page}
+```{=html}
+<iframe src="https://kkonoo.github.io/edu_sims/sims/prior-posterior/?embed=1&lang=ko" title="사전분포 × 가능도 → 사후분포" loading="lazy"
+        style="width: 100%; height: 1300px; border: 0;"></iframe>
+```
+:::
+
 ## 실습: base R로 직접 구현
 
 ### 유병률에 따른 PPV 곡선
