@@ -136,6 +136,8 @@ $\lambda = 4.77$에서 36개 계수가 정확히 0입니다. 그 계수들의 $|
 
 원하는 것은 둘입니다. 잡음 계수는 0으로 세게 누르고, 큰 신호는 거의 건드리지 않는 것입니다. Carvalho, Polson & Scott(2010)의 horseshoe는 계수마다 **국소 척도(local scale)** $\lambda_j$를 따로 주고 모두가 **전역 척도(global scale)** $\tau$를 공유하게 합니다. $\tau$가 작으면 모든 계수가 0 쪽으로 눌립니다. 그런데 $\lambda_j$는 반코시(half-Cauchy)라서 꼬리가 매우 두껍습니다. 그래서 데이터가 강하게 지지하는 몇 개만 이 압력에서 빠져나갑니다. W7이 $\tau$ 하나로 모든 그룹을 묶었다면, horseshoe는 **계수마다 자기 척도를 하나씩 더 가진 계층 모형**입니다.
 
+![전역 척도 τ 하나가 모든 계수를 0 쪽으로 누르고, 국소 척도 λⱼ가 계수마다 그 압력에서 얼마나 벗어날지 정합니다. λⱼ가 작은 잡음 계수는 0 근처로 눌리고(κⱼ ≈ 1), λⱼ가 큰 두 신호 계수만 거의 그대로 남습니다(κⱼ ≈ 0). 막대 높이는 설명용입니다.](../assets/img/w8/horseshoe_scales.png){fig-alt="전역 척도 τ에서 일곱 개의 국소 척도 λ₁~λ₇로 선이 갈라지고, 각 λⱼ 아래에 계수 βⱼ의 크기 막대가 있으며, 작은 λⱼ를 가진 다섯 잡음 계수는 막대가 거의 0이고 큰 λⱼ를 가진 두 신호 계수만 막대가 높은 계층 그림."}
+
 ::: {.callout-note collapse="true"}
 ## 수식으로 보기: horseshoe와 축소 계수 kappa
 $$ \beta_j \mid \lambda_j, \tau, \sigma \sim \mathcal{N}(0,\ \lambda_j^2\tau^2\sigma^2), \qquad \lambda_j \sim C^+(0,1), \qquad \tau \sim C^+(0,1) $$
@@ -165,6 +167,8 @@ $\tau=1$에서는 대칭인 말굽입니다. $\tau=0.1$로 줄이면 질량이 $
 ## 축소 곡선: 네 사전분포를 한 그림에
 
 관측 하나 $y \sim \mathcal{N}(\beta, 1)$만 있는 정규평균 문제에서 추정치를 $y$의 함수로 그리면 사전분포의 성격이 그대로 보입니다. ridge($\tau=1$)는 $y/2$이고 lasso MAP($b=1$)는 $S(y, 1)$입니다. 베이지안 lasso와 horseshoe($\tau$ 고정)의 사후평균은 1차원 수치적분(`integrate`)으로 계산합니다.
+
+![① 0 근처: 정규는 둥글고, Laplace는 0에서 꺾이며, horseshoe는 0에서 끝없이 솟습니다. ② 꼬리(세로축 로그): 정규가 가장 빨리 떨어지고 horseshoe가 가장 두껍습니다. 척도는 아래 축소 곡선과 같이 정규 τ = 1, Laplace b = 1, horseshoe τ = 1로 두었습니다.](../assets/img/w8/prior_shapes.png){fig-alt="정규(τ=1), Laplace(b=1), horseshoe(τ=1) 사전 밀도를 위에는 0 근처 선형 축으로, 아래에는 꼬리 부분 로그 축으로 그려, horseshoe가 0에서 가장 뾰족하고 꼬리도 가장 두꺼우며 정규 꼬리가 가장 빨리 떨어지는 모습을 보여 주는 두 패널 그래프."}
 
 ```{r}
 hs_mean <- function(y, tau) {   # horseshoe 사후평균 (1 - E[kappa | y]) y. f는 kappa의 비정규화 사후밀도
