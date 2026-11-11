@@ -25,8 +25,8 @@ format:
 ## 강의 소개
 
 이 강의는 **생명정보학 데이터를 다루는 대학원생**을 대상으로 합니다.
-빈도주의 통계는 이미 써 봤지만 베이지안은 낯선 분, 논문에서 posterior probability,
-credible interval, R-hat 같은 말이 나올 때마다 넘겼던 분을 염두에 두고 썼습니다.
+빈도주의 통계는 이미 써 봤지만 베이지안은 낯선 분을 염두에 두고 썼습니다.
+논문에서 posterior probability, credible interval, R-hat 같은 말이 나올 때마다 넘겼던 분도 염두에 두었습니다.
 
 ::: {.callout-tip}
 ## 이 강의의 구성 원칙
