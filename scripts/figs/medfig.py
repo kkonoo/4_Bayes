@@ -130,7 +130,7 @@ def save(fig, path):
         arts = [x for a in fig.axes for x in a.texts + a.patches + a.images + a.lines + a.collections
                 if x.get_visible()]
         bbs = [x.get_window_extent(r) for x in arts]
-        bb = Bbox.union([b for b in bbs if np.isfinite(b.bounds).all() and b.width > 0 and b.height > 0])
+        bb = Bbox.union([b for b in bbs if np.isfinite(b.bounds).all() and (b.width > 0 or b.height > 0)])
         bbox = bb.transformed(fig.dpi_scale_trans.inverted()).padded(0.12)
         w = bbox.width
     fig.savefig(path, dpi=200, bbox_inches=bbox, pad_inches=0.12)
